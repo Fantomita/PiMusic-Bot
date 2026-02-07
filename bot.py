@@ -1,35 +1,34 @@
 import asyncio
 import datetime
-import difflib
 import json
 import logging
 import os
-import psutil
+import platform
 import random
 import re
-import sys
-import signal
-import platform
-import stat
 import shutil
-import requests
+import signal
+import stat
 import subprocess
+import sys
 import time
 from uuid import uuid4
-from dotenv import load_dotenv
 
+# --- Third Party Imports ---
 import discord
-from discord.ext import commands, tasks
-from discord import ui, app_commands
+import psutil
+import requests
 import yt_dlp
-
-# --- Import Web Dashboard ---
-from quart import Quart, render_template_string, request, jsonify, make_response, redirect, send_from_directory
+from discord import app_commands, ui
+from discord.ext import commands, tasks
+from dotenv import load_dotenv
+from quart import Quart, jsonify, make_response, redirect, render_template_string, request, send_from_directory
 
 # ==========================================
 # 1. SETUP & CONFIGURATION
 # ==========================================
 
+# --- Logging Setup ---
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s [%(levelname)s] %(message)s',
@@ -42,10 +41,12 @@ logging.basicConfig(
 def log_error(msg): logging.error(msg)
 def log_info(msg): logging.info(msg)
 
+# --- System Optimization ---
 sys.dont_write_bytecode = True
-try: os.nice(-15)
+try: os.nice(-15)  # Higher priority for audio process
 except: pass
 
+# --- Environment Variables ---
 load_dotenv()
 TOKEN = os.getenv('DISCORD_TOKEN')
 
@@ -53,7 +54,7 @@ if not TOKEN:
     log_error("❌ ERROR: DISCORD_TOKEN missing.")
     sys.exit(1)
 
-# --- Files & Paths ---
+# --- File Paths ---
 CACHE_DIR = './music_cache'
 CACHE_MAP_FILE = 'cache_map.json'
 PLAYLIST_FILE = 'playlists.json'
@@ -63,22 +64,55 @@ MAX_CACHE_SIZE_GB = 16
 if not os.path.exists(CACHE_DIR): os.makedirs(CACHE_DIR)
 
 # ==========================================
-# 2. AUDIO SETTINGS
+# 2. AUDIO & DOWNLOADER SETTINGS
 # ==========================================
 
-COLOR_MAIN = 0xFFD700
+COLOR_MAIN = 0xFFD700  # Gold
 
-FFMPEG_STREAM_OPTS = {'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5 -nostdin', 'options': '-vn -threads 2 -bufsize 8192k'}
-FFMPEG_LOCAL_OPTS = {'options': '-vn -threads 2 -bufsize 8192k'}
+# --- FFmpeg Options ---
+FFMPEG_STREAM_OPTS = {
+    'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5 -nostdin',
+    'options': '-vn -threads 2 -bufsize 8192k'
+}
+FFMPEG_LOCAL_OPTS = {
+    'options': '-vn -threads 2 -bufsize 8192k'
+}
 
-COMMON_YDL_ARGS = {'quiet': True, 'no_warnings': True, 'noplaylist': True, 'socket_timeout': 30}
+# --- yt-dlp Options ---
+COMMON_YDL_ARGS = {
+    'quiet': True,
+    'no_warnings': True,
+    'noplaylist': True,
+    'socket_timeout': 30
+}
 
-YDL_PLAY_OPTS = {'format': 'bestaudio[ext=webm]/bestaudio/best', **COMMON_YDL_ARGS}
-YDL_FLAT_OPTS = {'extract_flat': 'in_playlist', **COMMON_YDL_ARGS}
-YDL_SEARCH_OPTS = {'extract_flat': False, **COMMON_YDL_ARGS} # Deep search for accuracy
-YDL_MIX_OPTS = {'extract_flat': 'in_playlist', 'playlist_items': '1-20', **COMMON_YDL_ARGS, 'noplaylist': False}
+# 1. Play: Stream high quality audio
+YDL_PLAY_OPTS = {
+    'format': 'bestaudio[ext=webm]/bestaudio/best',
+    **COMMON_YDL_ARGS
+}
 
-# Thumbnails enabled + JPG conversion (From Pretty)
+# 2. Flat: Fast metadata fetch (good for playlists/URLs)
+YDL_FLAT_OPTS = {
+    'extract_flat': 'in_playlist',
+    **COMMON_YDL_ARGS
+}
+
+# 3. Search: Deep metadata fetch (good for keywords to get accurate video URL)
+YDL_SEARCH_OPTS = {
+    'extract_flat': False,
+    **COMMON_YDL_ARGS
+}
+
+# 4. Mix: For Autoplay/Radio mode
+YDL_MIX_OPTS = {
+    'extract_flat': 'in_playlist',
+    'playlist_items': '1-20',
+    **COMMON_YDL_ARGS,
+    'noplaylist': False
+}
+
+# 5. Download: Save to cache with thumbnail
 YDL_DOWNLOAD_OPTS = {
     'format': 'bestaudio[ext=webm]/bestaudio/best',
     'outtmpl': f'{CACHE_DIR}/%(id)s.%(ext)s',
@@ -87,13 +121,20 @@ YDL_DOWNLOAD_OPTS = {
     **COMMON_YDL_ARGS
 }
 
-YDL_PLAYLIST_LOAD_OPTS = {'extract_flat': 'in_playlist', 'playlist_items': '1-50', **COMMON_YDL_ARGS, 'noplaylist': False}
+# 6. Playlist Load: Batch loading
+YDL_PLAYLIST_LOAD_OPTS = {
+    'extract_flat': 'in_playlist',
+    'playlist_items': '1-50',
+    **COMMON_YDL_ARGS,
+    'noplaylist': False
+}
 
 # ==========================================
 # 3. HELPER FUNCTIONS
 # ==========================================
 
 def load_json(filename):
+    """Safely loads a JSON file."""
     if os.path.exists(filename):
         try:
             with open(filename, 'r') as f: return json.load(f)
@@ -101,30 +142,24 @@ def load_json(filename):
     return {}
 
 def save_json(filename, data):
+    """Safely saves data to a JSON file."""
     with open(filename, 'w') as f: json.dump(data, f)
 
+# Load Initial State
 cache_map = load_json(CACHE_MAP_FILE)
 saved_playlists = load_json(PLAYLIST_FILE)
 server_settings = load_json(SETTINGS_FILE)
 
 def format_time(seconds):
+    """Formats seconds into MM:SS or HH:MM:SS."""
     if not seconds: return "0:00"
     seconds = int(seconds)
     m, s = divmod(seconds, 60)
     h, m = divmod(m, 60)
     return f"{h}:{m:02}:{s:02}" if h > 0 else f"{m}:{s:02}"
 
-def is_too_similar(title1, title2):
-    def clean(s):
-        s = s.lower()
-        for w in ["official", "video", "lyrics", "audio", "hq", "hd", "4k", "music", "visualizer", "remix"]:
-            s = s.replace(w, "")
-        return re.sub(r'\W+', '', s)
-    t1, t2 = clean(title1), clean(title2)
-    if len(t1) < 3 or len(t2) < 3: return t1 == t2
-    return t1 in t2 or t2 in t1
-
 def enforce_cache_limit():
+    """Deletes old cached files if the directory exceeds the size limit."""
     max_bytes = MAX_CACHE_SIZE_GB * 1024 * 1024 * 1024
     files = []
     total_size = 0
@@ -133,21 +168,26 @@ def enforce_cache_limit():
             if entry.is_file():
                 total_size += entry.stat().st_size
                 if entry.name.endswith('.webm'): files.append(entry)
+    
     if total_size > max_bytes:
+        # Sort by modification time (oldest first)
         files.sort(key=lambda x: x.stat().st_mtime)
         for entry in files:
             try:
                 os.remove(entry.path)
                 thumb_path = entry.path.replace('.webm', '.jpg')
                 if os.path.exists(thumb_path): os.remove(thumb_path)
+                
                 total_size -= entry.stat().st_size
                 vid_id = entry.name.replace('.webm', '')
                 if vid_id in cache_map: del cache_map[vid_id]
+                
                 if total_size <= (max_bytes - 100 * 1024 * 1024): break
             except: pass
         save_json(CACHE_MAP_FILE, cache_map)
 
 def get_thumbnail_url(vid_id):
+    """Returns local thumbnail path if cached, else remote URL."""
     if os.path.exists(f"{CACHE_DIR}/{vid_id}.jpg"):
         return f"/cache/thumb/{vid_id}.jpg"
     return f"https://i.ytimg.com/vi/{vid_id}/mqdefault.jpg"
@@ -161,41 +201,7 @@ logging.getLogger('quart.serving').setLevel(logging.ERROR)
 logging.getLogger('hypercorn.error').setLevel(logging.ERROR)
 bot_instance = None 
 
-# --- SECURITY ---
-def get_bot_token():
-    if bot_instance:
-        cog = bot_instance.get_cog('MusicBot')
-        if cog: return cog.web_auth_token
-    return None
-
-@app.before_request
-def check_auth():
-    if request.path.startswith('/auth') or request.path.startswith('/cache'): return
-    user_token = request.cookies.get('pi_music_auth')
-    server_token = get_bot_token()
-    if not server_token or user_token != server_token:
-        return render_template_string(""")
-            <body style="background:#0f0f0f; color:#eee; font-family:sans-serif; display:flex; flex-direction:column; align-items:center; justify-content:center; height:100vh; margin:0;">
-                <h1 style="color:#ff4444; font-size:4rem; margin:0;">⛔</h1>
-                <h2 style="margin-top:10px;">Access Denied</h2>
-                <p style="color:#888;">Use <code>/link</code> in Discord to generate a secure key.</p>
-            </body>
-        """), 403
-
-@app.route('/auth')
-async def auth_route():
-    token_from_url = request.args.get('token')
-    server_token = get_bot_token()
-    if token_from_url == server_token:
-        resp = await make_response(redirect('/'))
-        resp.set_cookie('pi_music_auth', token_from_url, max_age=86400)
-        return resp
-    return "❌ Invalid Token.", 403
-
-@app.route('/cache/thumb/<path:filename>')
-async def serve_thumbnail(filename):
-    return await send_from_directory(CACHE_DIR, filename)
-
+# --- Dashboard HTML Template ---
 DASHBOARD_HTML = """
 <!DOCTYPE html>
 <html lang="en">
@@ -408,16 +414,58 @@ DASHBOARD_HTML = """
     </script>
 </body>
 </html>
-"""
+"
 
+# --- Auth Helpers ---
 def get_first_available_guild():
+    """Returns the first guild the bot is connected to (for single-server setups)."""
     if not bot_instance: return None
     if bot_instance.voice_clients: return bot_instance.voice_clients[0].guild
     if bot_instance.guilds: return bot_instance.guilds[0]
     return None
 
+def get_bot_token():
+    """Retrieves the secure web token from the bot instance."""
+    if bot_instance:
+        cog = bot_instance.get_cog('MusicBot')
+        if cog: return cog.web_auth_token
+    return None
+
+# --- Routes ---
+
+@app.before_request
+def check_auth():
+    if request.path.startswith('/auth') or request.path.startswith('/cache'): return
+    user_token = request.cookies.get('pi_music_auth')
+    server_token = get_bot_token()
+    if not server_token or user_token != server_token:
+        return render_template_string("""
+            <body style="background:#0f0f0f; color:#eee; font-family:sans-serif; display:flex; flex-direction:column; align-items:center; justify-content:center; height:100vh; margin:0;">
+                <h1 style="color:#ff4444; font-size:4rem; margin:0;">⛔</h1>
+                <h2 style="margin-top:10px;">Access Denied</h2>
+                <p style="color:#888;">Use <code>/link</code> in Discord to generate a secure key.</p>
+            </body>
+        """), 403
+
+@app.route('/auth')
+async def auth_route():
+    token_from_url = request.args.get('token')
+    server_token = get_bot_token()
+    if token_from_url == server_token:
+        resp = await make_response(redirect('/'))
+        resp.set_cookie('pi_music_auth', token_from_url, max_age=86400)
+        return resp
+    return "❌ Invalid Token.", 403
+
+@app.route('/cache/thumb/<path:filename>')
+async def serve_thumbnail(filename):
+    return await send_from_directory(CACHE_DIR, filename)
+
 @app.route('/')
-async def home(): return await render_template_string(DASHBOARD_HTML)
+async def home():
+    return await render_template_string(DASHBOARD_HTML)
+
+# --- API Routes ---
 
 @app.route('/api/status')
 async def api_status():
@@ -462,13 +510,13 @@ async def api_save_playlist():
     url = data.get('url', '')
     if not name: return jsonify({'error': 'No name'}), 400
     if url:
-        # Added Validation from Working
         if 'youtube.com' not in url and 'youtu.be' not in url:
              return jsonify({'error': 'Invalid YouTube URL'}), 400
         saved_playlists[name] = {'type': 'live', 'url': url}
         save_json(PLAYLIST_FILE, saved_playlists)
         return jsonify({'status': 'ok'})
-    # Static save logic
+    
+    # Save current queue
     guild = get_first_available_guild()
     if not guild: return jsonify({'error': 'No guild'}), 400
     cog = bot_instance.get_cog('MusicBot')
@@ -477,6 +525,7 @@ async def api_save_playlist():
     if state.current_track: tracks.append(state.current_track)
     tracks.extend(state.queue)
     if not tracks: return jsonify({'error': 'Empty'}), 400
+    
     clean = [{'id':t['id'], 'title':t['title'], 'author':t['author'], 'duration':t['duration'], 'duration_seconds':t['duration_seconds'], 'webpage':t['webpage']} for t in tracks]
     saved_playlists[name] = clean
     save_json(PLAYLIST_FILE, saved_playlists)
@@ -506,7 +555,6 @@ async def api_load_playlist():
         
     if new_tracks:
         state.queue.extend(new_tracks)
-        
         # Try to connect if not in VC
         if not guild.voice_client:
             for channel in guild.voice_channels:
@@ -617,10 +665,11 @@ async def api_add():
     except: return jsonify({'error':'fail'}), 500
 
 # ==========================================
-# 5. DISCORD UI CLASSES (Restored from Working)
+# 5. DISCORD UI CLASSES
 # ==========================================
 
 class ServerState:
+    """Stores the music state for a single guild."""
     def __init__(self):
         self.queue = []
         self.current_track = None
@@ -633,6 +682,7 @@ class ServerState:
         self.last_text_channel = None 
 
 class SelectionMenu(ui.Select):
+    """Dropdown menu for search results."""
     def __init__(self, entries, cog, ctx):
         options = []
         for entry in entries[:10]:
@@ -647,6 +697,7 @@ class SelectionMenu(ui.Select):
         await self.cog.prepare_song(self.ctx, self.values[0])
 
 class SelectionView(ui.View):
+    """View container for the selection menu."""
     def __init__(self, entries, cog, ctx):
         super().__init__(timeout=30)
         self.add_item(SelectionMenu(entries, cog, ctx))
@@ -661,6 +712,7 @@ class SelectionView(ui.View):
         except: pass
 
 class MusicControlView(ui.View):
+    """Persistent buttons for the 'Now Playing' message."""
     def __init__(self, cog, guild_id):
         super().__init__(timeout=None)
         self.cog, self.guild_id = cog, guild_id
@@ -679,20 +731,21 @@ class MusicControlView(ui.View):
     async def shuffle(self, interaction, button):
         state = self.cog.get_state(self.guild_id)
         random.shuffle(state.queue)
-        await interaction.response.send_message("🔀 Shuffled queue!", ephemeral=True)
+        await interaction.response.send_message("🔀 Shuffled queue!", ephemeral=True, silent=True)
     @ui.button(emoji="📋", style=discord.ButtonStyle.gray)
     async def q_btn(self, interaction, button):
         state = self.cog.get_state(self.guild_id)
         if not state.current_track and not state.queue:
-            return await interaction.response.send_message("Queue empty!", ephemeral=True)
+            return await interaction.response.send_message("Queue empty!", ephemeral=True, silent=True)
         view = ListPaginator(state.queue, title="Server Queue", is_queue=True, current=state.current_track)
-        await interaction.response.send_message(embed=view.get_embed(), view=view, ephemeral=True)
+        await interaction.response.send_message(embed=view.get_embed(), view=view, ephemeral=True, silent=True)
     @ui.button(emoji="⏹️", style=discord.ButtonStyle.danger)
     async def stop_btn(self, interaction, button):
         await self.cog.stop_logic(self.guild_id)
-        await interaction.response.send_message("👋 Stopping & Saving...", ephemeral=True)
+        await interaction.response.send_message("👋 Stopping & Saving...", ephemeral=True, silent=True)
 
 class ListPaginator(ui.View):
+    """Pagination for queue, history, and cache lists."""
     def __init__(self, data_list, title="List", is_queue=True, current=None):
         super().__init__(timeout=60)
         self.data_list = data_list
@@ -757,6 +810,7 @@ class MusicBot(commands.Cog):
             except: pass
         if self.web_task: self.web_task.cancel()
 
+    # --- Cloudflare Tunnel Logic ---
     def ensure_cloudflared(self):
         """Downloads the correct cloudflared binary for the system."""
         if os.path.exists("./cloudflared"): return True
@@ -827,7 +881,10 @@ class MusicBot(commands.Cog):
         if guild_id not in self.states: self.states[guild_id] = ServerState()
         return self.states[guild_id]
 
+    # --- Playback Logic ---
+
     async def download_session_songs(self, tracks):
+        """Background task to cache songs played in the session."""
         if not tracks: return
         to_download = [t for t in tracks if not os.path.exists(f"{CACHE_DIR}/{t['id']}.webm")]
         if not to_download: return
@@ -843,7 +900,7 @@ class MusicBot(commands.Cog):
             await asyncio.sleep(0.5)
 
     async def stop_logic(self, guild_id):
-        # Don't kill tunnel on stop, only on unload
+        """Clean disconnect logic."""
         if guild_id not in self.states: return
         guild = self.bot.get_guild(guild_id)
         state = self.states[guild_id]
@@ -856,6 +913,7 @@ class MusicBot(commands.Cog):
 
     @tasks.loop(minutes=2)
     async def cleanup_loop(self):
+        """Auto-disconnect if alone or idle."""
         now = datetime.datetime.now()
         for gid in list(self.states.keys()):
             guild = self.bot.get_guild(gid)
@@ -878,6 +936,7 @@ class MusicBot(commands.Cog):
         return guild.text_channels[0] if guild.text_channels else None
 
     async def load_rest_of_playlist(self, url, guild_id):
+        """Background task to load large playlists."""
         REST_OPTS = {'extract_flat': 'in_playlist', 'playlist_items': '51-', **COMMON_YDL_ARGS, 'noplaylist': False}
         try:
             info = await self.bot.loop.run_in_executor(None, lambda: yt_dlp.YoutubeDL(REST_OPTS).extract_info(url, download=False))
@@ -894,6 +953,7 @@ class MusicBot(commands.Cog):
         except: pass
 
     async def ensure_autoplay(self, guild_id):
+        """Logic for buffering the next suggested song."""
         state = self.get_state(guild_id)
         
         # 1. If Autoplay is OFF, remove any suggested tracks
@@ -926,6 +986,7 @@ class MusicBot(commands.Cog):
             log_error(f"Autoplay fetch failed: {e}")
 
     async def prepare_song(self, ctx, query):
+        """Main entry point for adding a song to the queue."""
         state = self.get_state(ctx.guild.id)
         state.last_interaction = datetime.datetime.now()
         state.stopping = False
@@ -934,7 +995,7 @@ class MusicBot(commands.Cog):
         # Clear suggestions so user song plays next
         state.queue = [t for t in state.queue if not t.get('suggested')]
         
-        # Robust VC Join Logic from Working, but returning Embeds from Pretty
+        # VC Join Logic
         if not ctx.voice_client:
             if ctx.author.voice: 
                 try: await ctx.author.voice.channel.connect()
@@ -975,13 +1036,12 @@ class MusicBot(commands.Cog):
             self.bot.loop.create_task(self.ensure_autoplay(ctx.guild.id))
 
     async def play_next(self, ctx):
+        """Recursive function to play the next song in the queue."""
         state = self.get_state(ctx.guild.id)
-        # Added is_connected() check from Working
+        
         if state.stopping or not ctx.guild.voice_client or not ctx.guild.voice_client.is_connected():
              return
         if state.processing_next: return
-        
-        # Removed old synchronous autoplay logic here
         
         if state.queue:
             state.processing_next = True 
@@ -994,7 +1054,7 @@ class MusicBot(commands.Cog):
                 local = os.path.abspath(f"{CACHE_DIR}/{next_song['id']}.webm")
                 play_local = os.path.exists(local) and os.path.getsize(local) > 1024
                 
-                # Thumbnail logic from Pretty
+                # Thumbnail Check
                 thumb_local = f"{CACHE_DIR}/{next_song['id']}.jpg"
                 if play_local and not os.path.exists(thumb_local):
                     try: await self.bot.loop.run_in_executor(None, lambda: yt_dlp.YoutubeDL({'writethumbnail':True, 'skip_download':True, 'outtmpl': f'{CACHE_DIR}/%(id)s.%(ext)s', 'quiet':True}).download([f"https://www.youtube.com/watch?v={next_song['id']}"])) # noqa
@@ -1105,13 +1165,13 @@ class MusicBot(commands.Cog):
         await ctx.send(embed=view.get_embed(), view=view, silent=True)
 
     @commands.hybrid_command(name="pause")
-    async def pause(self, ctx): 
+    async def pause(self, ctx):
         if ctx.voice_client.is_playing(): 
             ctx.voice_client.pause()
             await ctx.send(embed=discord.Embed(description="⏸️ Paused.", color=COLOR_MAIN), silent=True)
 
     @commands.hybrid_command(name="resume")
-    async def resume(self, ctx): 
+    async def resume(self, ctx):
         if ctx.voice_client.is_paused(): 
             ctx.voice_client.resume()
             await ctx.send(embed=discord.Embed(description="▶️ Resumed.", color=COLOR_MAIN), silent=True)
@@ -1152,7 +1212,7 @@ class MusicBot(commands.Cog):
             await ctx.send(embed=discord.Embed(description="🔄 Loading live playlist (First 50)...", color=COLOR_MAIN), silent=True)
             try:
                 info = await self.bot.loop.run_in_executor(None, lambda: yt_dlp.YoutubeDL(YDL_PLAYLIST_LOAD_OPTS).extract_info(content['url'], download=False))
-                tracks = [{'id':e['id'], 'title':e['title'], 'author':e['uploader'], 'duration':format_time(e['duration']), 'duration_seconds':e['duration'], 'webpage':e['webpage']} for e in info['entries'] if e]
+                tracks = [{'id':e['id'], 'title':e['title'], 'author':e['uploader'], 'duration':format_time(e['duration']), 'duration_seconds':e['duration'], 'webpage':f"https://www.youtube.com/watch?v={e['id']}"} for e in info['entries'] if e]
                 state.queue.extend(tracks)
                 await ctx.send(embed=discord.Embed(description=f"✅ Loaded **{len(tracks)}**. Rest loading in BG...", color=COLOR_MAIN), silent=True)
                 asyncio.create_task(self.load_rest_of_playlist(content['url'], ctx.guild.id))
@@ -1234,7 +1294,6 @@ async def on_ready():
     global bot_instance
     bot_instance = bot 
     await bot.change_presence(activity=discord.Activity(type=discord.ActivityType.listening, name="$help"))
-    # Added Sync Logic from Working
     try:
         synced = await bot.tree.sync()
         log_info(f"✅ Synced {len(synced)} slash commands.")
