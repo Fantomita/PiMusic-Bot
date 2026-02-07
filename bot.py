@@ -588,8 +588,19 @@ async def api_add():
                     await channel.connect()
                     break
 
-        info = await bot_instance.loop.run_in_executor(None, lambda: yt_dlp.YoutubeDL(YDL_FLAT_OPTS).extract_info(query, download=False))
-        def process(e): return {'id': e['id'], 'title': e['title'], 'author': e['uploader'], 'duration': format_time(e['duration']), 'duration_seconds': e['duration'], 'webpage': e['url']}
+        opts = YDL_FLAT_OPTS if query.startswith('http') else YDL_SEARCH_OPTS
+        info = await bot_instance.loop.run_in_executor(None, lambda: yt_dlp.YoutubeDL(opts).extract_info(query, download=False))
+        
+        def process(e): 
+            url = e.get('webpage_url') or e.get('url') or f"https://www.youtube.com/watch?v={e['id']}"
+            return {
+                'id': e['id'], 
+                'title': e['title'], 
+                'author': e.get('uploader', 'Unknown'), 
+                'duration': format_time(e.get('duration', 0)), 
+                'duration_seconds': e.get('duration', 0), 
+                'webpage': url
+            }
         
         if 'entries' in info: state.queue.append(process(info['entries'][0]))
         else: state.queue.append(process(info))
@@ -935,7 +946,17 @@ class MusicBot(commands.Cog):
         # Use Deep Search for keywords, Flat for URLs
         opts = YDL_FLAT_OPTS if query.startswith('http') else YDL_SEARCH_OPTS
         info = await self.bot.loop.run_in_executor(None, lambda: yt_dlp.YoutubeDL(opts).extract_info(query, download=False))
-        def proc(e): return {'id': e['id'], 'title': e['title'], 'author': e['uploader'], 'duration': format_time(e['duration']), 'duration_seconds': e['duration'], 'webpage': e['url']}
+        
+        def proc(e): 
+            url = e.get('webpage_url') or e.get('url') or f"https://www.youtube.com/watch?v={e['id']}"
+            return {
+                'id': e['id'], 
+                'title': e['title'], 
+                'author': e.get('uploader', 'Unknown'), 
+                'duration': format_time(e.get('duration', 0)), 
+                'duration_seconds': e.get('duration', 0), 
+                'webpage': url
+            }
         
         async def send_res(msg):
             if ctx.interaction: await ctx.interaction.followup.send(embed=discord.Embed(description=msg, color=COLOR_MAIN), silent=True)
