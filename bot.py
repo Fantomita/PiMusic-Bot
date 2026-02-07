@@ -506,6 +506,14 @@ async def api_load_playlist():
         
     if new_tracks:
         state.queue.extend(new_tracks)
+        
+        # Try to connect if not in VC
+        if not guild.voice_client:
+            for channel in guild.voice_channels:
+                if len(channel.members) > 0:
+                    await channel.connect()
+                    break
+
         if guild.voice_client and not guild.voice_client.is_playing() and not state.processing_next:
              class DummyCtx:
                  def __init__(self, g, v): self.guild, self.voice_client, self.author = g, v, "WebUser"
@@ -570,6 +578,13 @@ async def api_add():
     if not state.last_text_channel: state.last_text_channel = guild.text_channels[0]
 
     try:
+        # Try to connect if not in VC
+        if not guild.voice_client:
+            for channel in guild.voice_channels:
+                if len(channel.members) > 0:
+                    await channel.connect()
+                    break
+
         info = await bot_instance.loop.run_in_executor(None, lambda: yt_dlp.YoutubeDL(YDL_FLAT_OPTS).extract_info(query, download=False))
         def process(e): return {'id': e['id'], 'title': e['title'], 'author': e['uploader'], 'duration': format_time(e['duration']), 'duration_seconds': e['duration'], 'webpage': e['url']}
         
@@ -921,6 +936,12 @@ class MusicBot(commands.Cog):
              http_tunnel = await self.bot.loop.run_in_executor(None, lambda: ngrok.connect("127.0.0.1:5000", bind_tls=True))
              self.public_url = http_tunnel.public_url
         
+        # Auto-join VC when link is requested
+        if not ctx.voice_client and ctx.author.voice:
+            try:
+                await ctx.author.voice.channel.connect()
+            except: pass
+
         secure_link = f"{self.public_url}/auth?token={self.web_auth_token}"
         embed = discord.Embed(title="🎛️ Web Dashboard", description="Click below to open the control panel.", color=COLOR_MAIN)
         view = ui.View()
