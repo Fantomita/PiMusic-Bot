@@ -641,6 +641,14 @@ class SelectionView(ui.View):
         self.add_item(SelectionMenu(entries, cog, ctx))
         self.message = None
 
+    async def on_timeout(self):
+        for child in self.children:
+            child.disabled = True
+        try:
+            if self.message:
+                await self.message.edit(content="⌛ **Search expired.**", view=self)
+        except: pass
+
 class MusicControlView(ui.View):
     def __init__(self, cog, guild_id):
         super().__init__(timeout=None)
@@ -1172,7 +1180,8 @@ class MusicBot(commands.Cog):
     async def search(self, ctx, query: str):
         await ctx.defer()
         info = await self.bot.loop.run_in_executor(None, lambda: yt_dlp.YoutubeDL(YDL_FLAT_OPTS).extract_info(f"ytsearch5:{query}", download=False))
-        await ctx.send("🔎 **Results:**", view=SelectionView(info['entries'], self, ctx), silent=True)
+        view = SelectionView(info['entries'], self, ctx)
+        view.message = await ctx.send("🔎 **Results:**", view=view, silent=True)
 
     @commands.hybrid_command(name="history")
     async def history(self, ctx):
