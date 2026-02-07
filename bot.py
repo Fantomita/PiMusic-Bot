@@ -645,9 +645,8 @@ async def api_add():
                     await channel.connect()
                     break
 
-        # Use Deep Search for keywords (better accuracy), Flat for URLs
-        opts = YDL_FLAT_OPTS if query.startswith('http') else YDL_SEARCH_OPTS
-        info = await bot_instance.loop.run_in_executor(None, lambda: yt_dlp.YoutubeDL(opts).extract_info(query, download=False))
+        # Use Flat Options (verified working)
+        info = await bot_instance.loop.run_in_executor(None, lambda: yt_dlp.YoutubeDL(YDL_FLAT_OPTS).extract_info(query, download=False))
         
         def process(e): 
             url = e.get('webpage_url') or e.get('url') or f"https://www.youtube.com/watch?v={e['id']}"
@@ -1065,9 +1064,8 @@ class MusicBot(commands.Cog):
 
         if ctx.interaction: await ctx.interaction.response.defer()
         
-        # Use Deep Search for keywords (better accuracy), Flat for URLs (faster)
-        opts = YDL_FLAT_OPTS if query.startswith('http') else YDL_SEARCH_OPTS
-        info = await self.bot.loop.run_in_executor(None, lambda: yt_dlp.YoutubeDL(opts).extract_info(query, download=False))
+        # Use Flat Options (verified working)
+        info = await self.bot.loop.run_in_executor(None, lambda: yt_dlp.YoutubeDL(YDL_FLAT_OPTS).extract_info(query, download=False))
         
         def proc(e): 
             url = e.get('webpage_url') or e.get('url') or f"https://www.youtube.com/watch?v={e['id']}"
@@ -1127,9 +1125,14 @@ class MusicBot(commands.Cog):
                 else:
                     state.session_new_tracks[next_song['id']] = next_song
                     info = await self.bot.loop.run_in_executor(None, lambda: yt_dlp.YoutubeDL(YDL_PLAY_OPTS).extract_info(next_song['id'], download=False))
+                    
                     opts = FFMPEG_STREAM_OPTS.copy()
                     if 'http_headers' in info:
-                        opts['before_options'] = f'-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5 -headers " { " ".join([f"{k}: {v}\r\n" for k,v in info["http_headers"].items()]) } " -nostdin' # noqa
+                        header_args = ""
+                        for key, value in info['http_headers'].items():
+                            header_args += f"{key}: {value}\r\n"
+                        opts['before_options'] = f'-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5 -headers "{header_args}" -nostdin'
+                    
                     source = await discord.FFmpegOpusAudio.from_probe(info['url'], **opts)
 
                 ctx.voice_client.play(source, after=lambda e: self.bot.loop.create_task(self.play_next(ctx)))
@@ -1202,8 +1205,9 @@ class MusicBot(commands.Cog):
             await ctx.send("❌ Could not start Cloudflare Tunnel. Check logs.", silent=True)
 
     @commands.hybrid_command(name="play", aliases=["p"])
-    async def play(self, ctx, search: str):
-        await self.prepare_song(ctx, search if 'http' in search else f"ytsearch1:{search}")
+    async def play(self, ctx, *, search: str):
+        q = search if re.match(r'^https?://', search) else f"ytsearch1:{search}"
+        await self.prepare_song(ctx, q)
 
     @commands.hybrid_command(name="stop", aliases=["dc", "leave"])
     async def stop(self, ctx): 
@@ -1319,10 +1323,10 @@ class MusicBot(commands.Cog):
         await ctx.send(embed=embed, silent=True)
 
     @commands.hybrid_command(name="search")
-    async def search(self, ctx, query: str):
+    async def search(self, ctx, *, query: str):
         await ctx.defer()
-        # Deep search for accuracy in the list
-        info = await self.bot.loop.run_in_executor(None, lambda: yt_dlp.YoutubeDL(YDL_SEARCH_OPTS).extract_info(f"ytsearch5:{query}", download=False))
+        info = await self.bot.loop.run_in_executor(None, lambda: yt_dlp.YoutubeDL(YDL_FLAT_OPTS).extract_info(f"ytsearch5:{query}", download=False))
+        if not info.get('entries'): return await ctx.send("❌ No results.", silent=True)
         view = SelectionView(info['entries'], self, ctx)
         view.message = await ctx.send("🔎 **Results:**", view=view, silent=True)
 
