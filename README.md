@@ -1,6 +1,7 @@
 # PiMusic Bot 🎵
+> **High-performance Discord Music Bot with a real-time Web Dashboard and Local Caching.**
 
-A feature-rich Discord Music Bot with a built-in Web Dashboard, local caching for performance, and Raspberry Pi GPIO support.
+A feature-rich Discord Music Bot featuring a built-in Web Dashboard, local caching for performance, and seamless Cloudflare Tunneling. Optimized for Raspberry Pi and low-resource environments.
 
 ## 🚀 Features
 
