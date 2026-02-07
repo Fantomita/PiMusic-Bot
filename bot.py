@@ -798,9 +798,9 @@ class MusicBot(commands.Cog):
     async def on_command_error(self, ctx, error):
         if hasattr(ctx.command, 'on_error'): return
         if isinstance(error, commands.CommandNotFound): return
-        if isinstance(error, commands.MissingPermissions): await ctx.send("❌ Permission denied")
+        if isinstance(error, commands.MissingPermissions): await ctx.send("❌ Permission denied", silent=True)
         else:
-            try: await ctx.send(f"❌ Error: {str(error)[:100]}")
+            try: await ctx.send(f"❌ Error: {str(error)[:100]}", silent=True)
             except: pass
 
     def get_state(self, guild_id):
@@ -918,8 +918,8 @@ class MusicBot(commands.Cog):
         if not ctx.voice_client:
             if ctx.author.voice: 
                 try: await ctx.author.voice.channel.connect()
-                except Exception as e: return await ctx.send(embed=discord.Embed(description=f"❌ Error joining VC: {e}", color=discord.Color.red()))
-            else: return await ctx.send(embed=discord.Embed(description="❌ You must be in a Voice Channel!", color=discord.Color.red()))
+                except Exception as e: return await ctx.send(embed=discord.Embed(description=f"❌ Error joining VC: {e}", color=discord.Color.red()), silent=True)
+            else: return await ctx.send(embed=discord.Embed(description="❌ You must be in a Voice Channel!", color=discord.Color.red()), silent=True)
 
         if ctx.interaction: await ctx.interaction.response.defer()
         
@@ -927,8 +927,8 @@ class MusicBot(commands.Cog):
         def proc(e): return {'id': e['id'], 'title': e['title'], 'author': e['uploader'], 'duration': format_time(e['duration']), 'duration_seconds': e['duration'], 'webpage': e['url']}
         
         async def send_res(msg):
-            if ctx.interaction: await ctx.interaction.followup.send(embed=discord.Embed(description=msg, color=COLOR_MAIN))
-            else: await ctx.send(embed=discord.Embed(description=msg, color=COLOR_MAIN))
+            if ctx.interaction: await ctx.interaction.followup.send(embed=discord.Embed(description=msg, color=COLOR_MAIN), silent=True)
+            else: await ctx.send(embed=discord.Embed(description=msg, color=COLOR_MAIN), silent=True)
 
         if 'entries' in info: 
             state.queue.extend([proc(e) for e in info['entries'] if e])
@@ -992,7 +992,7 @@ class MusicBot(commands.Cog):
                 if next_song.get('suggested'): embed.set_footer(text="✨ Autoplay Suggestion")
                 
                 ch = self.get_notification_channel(ctx.guild)
-                if ch: await ch.send(embed=embed, view=MusicControlView(self, ctx.guild.id))
+                if ch: await ch.send(embed=embed, view=MusicControlView(self, ctx.guild.id), silent=True)
             
             except Exception as e: 
                 log_error(f"Playback error: {e}")
@@ -1012,19 +1012,19 @@ class MusicBot(commands.Cog):
         embed.add_field(name="📂 Playlists", value="`/saveplaylist`\n`/loadplaylist`\n`/listplaylists`\n`/delplaylist`", inline=False)
         embed.add_field(name="📜 Queue", value="`/queue`\n`/history`\n`/shuffle`", inline=False)
         embed.add_field(name="⚙️ Utils", value="`/search`\n`/cache`\n`/dash`", inline=False)
-        await ctx.send(embed=embed)
+        await ctx.send(embed=embed, silent=True)
 
     @commands.command()
     async def sync(self, ctx):
         await ctx.bot.tree.sync()
-        await ctx.send("✅ Synced! Commands will appear shortly.")
+        await ctx.send("✅ Synced! Commands will appear shortly.", silent=True)
 
     @commands.hybrid_command(name="setchannel")
     async def set_channel(self, ctx):
         server_settings[str(ctx.guild.id)] = ctx.channel.id
         save_json(SETTINGS_FILE, server_settings)
         embed = discord.Embed(description=f"✅ Bound to {ctx.channel.mention}", color=COLOR_MAIN)
-        await ctx.send(embed=embed)
+        await ctx.send(embed=embed, silent=True)
 
     @commands.hybrid_command(name="link")
     async def link(self, ctx):
@@ -1044,9 +1044,9 @@ class MusicBot(commands.Cog):
             embed.set_footer(text="Powered by Cloudflare Tunnel ☁️")
             view = ui.View()
             view.add_item(ui.Button(label="Open Dashboard", url=secure_link))
-            await ctx.send(embed=embed, view=view)
+            await ctx.send(embed=embed, view=view, silent=True)
         else:
-            await ctx.send("❌ Could not start Cloudflare Tunnel. Check logs.")
+            await ctx.send("❌ Could not start Cloudflare Tunnel. Check logs.", silent=True)
 
     @commands.hybrid_command(name="play")
     async def play(self, ctx, search: str):
@@ -1056,75 +1056,75 @@ class MusicBot(commands.Cog):
     async def stop(self, ctx): 
         await self.stop_logic(ctx.guild.id)
         embed = discord.Embed(description="👋 Stopped.", color=COLOR_MAIN)
-        await ctx.send(embed=embed)
+        await ctx.send(embed=embed, silent=True)
 
     @commands.hybrid_command(name="skip")
     async def skip(self, ctx): 
         ctx.voice_client.stop()
         embed = discord.Embed(description="⏭️ Skipped.", color=COLOR_MAIN)
-        await ctx.send(embed=embed)
+        await ctx.send(embed=embed, silent=True)
 
     @commands.hybrid_command(name="queue")
     async def queue(self, ctx):
         state = self.get_state(ctx.guild.id)
         if not state.current_track and not state.queue:
-            return await ctx.send(embed=discord.Embed(description="Queue empty.", color=COLOR_MAIN))
+            return await ctx.send(embed=discord.Embed(description="Queue empty.", color=COLOR_MAIN), silent=True)
         view = ListPaginator(state.queue, title="Server Queue", is_queue=True, current=state.current_track)
-        await ctx.send(embed=view.get_embed(), view=view)
+        await ctx.send(embed=view.get_embed(), view=view, silent=True)
 
     @commands.hybrid_command(name="pause")
     async def pause(self, ctx): 
         if ctx.voice_client.is_playing(): 
             ctx.voice_client.pause()
-            await ctx.send(embed=discord.Embed(description="⏸️ Paused.", color=COLOR_MAIN))
+            await ctx.send(embed=discord.Embed(description="⏸️ Paused.", color=COLOR_MAIN), silent=True)
 
     @commands.hybrid_command(name="resume")
     async def resume(self, ctx): 
         if ctx.voice_client.is_paused(): 
             ctx.voice_client.resume()
-            await ctx.send(embed=discord.Embed(description="▶️ Resumed.", color=COLOR_MAIN))
+            await ctx.send(embed=discord.Embed(description="▶️ Resumed.", color=COLOR_MAIN), silent=True)
 
     @commands.hybrid_command(name="shuffle")
     async def shuffle(self, ctx):
         random.shuffle(self.get_state(ctx.guild.id).queue)
-        await ctx.send(embed=discord.Embed(description="🔀 Shuffled.", color=COLOR_MAIN))
+        await ctx.send(embed=discord.Embed(description="🔀 Shuffled.", color=COLOR_MAIN), silent=True)
 
     @commands.hybrid_command(name="saveplaylist")
     async def saveplaylist(self, ctx, name: str, url: str = None):
         if url: 
             # Added validation from Working
             if 'youtube.com' not in url and 'youtu.be' not in url:
-                return await ctx.send(embed=discord.Embed(description="❌ Invalid YouTube URL.", color=discord.Color.red()))
+                return await ctx.send(embed=discord.Embed(description="❌ Invalid YouTube URL.", color=discord.Color.red()), silent=True)
             saved_playlists[name] = {'type': 'live', 'url': url}
         else:
             state = self.get_state(ctx.guild.id)
             tracks = []
             if state.current_track: tracks.append(state.current_track)
             tracks.extend(state.queue)
-            if not tracks: return await ctx.send(embed=discord.Embed(description="Queue empty.", color=discord.Color.red()))
+            if not tracks: return await ctx.send(embed=discord.Embed(description="Queue empty.", color=discord.Color.red()), silent=True)
             clean = [{'id':t['id'], 'title':t['title'], 'author':t['author'], 'duration':t['duration'], 'duration_seconds':t['duration_seconds'], 'webpage':t['webpage']} for t in tracks]
             saved_playlists[name] = clean
         save_json(PLAYLIST_FILE, saved_playlists)
-        await ctx.send(embed=discord.Embed(description=f"💾 Saved **{name}**.", color=COLOR_MAIN))
+        await ctx.send(embed=discord.Embed(description=f"💾 Saved **{name}**.", color=COLOR_MAIN), silent=True)
 
     @commands.hybrid_command(name="loadplaylist")
     async def loadplaylist(self, ctx, name: str):
-        if name not in saved_playlists: return await ctx.send(embed=discord.Embed(description="❌ Not found.", color=discord.Color.red()))
+        if name not in saved_playlists: return await ctx.send(embed=discord.Embed(description="❌ Not found.", color=discord.Color.red()), silent=True)
         content = saved_playlists[name]
         state = self.get_state(ctx.guild.id)
         
         if isinstance(content, list):
             state.queue.extend(content)
-            await ctx.send(embed=discord.Embed(description=f"📂 Loaded **{len(content)}** songs.", color=COLOR_MAIN))
+            await ctx.send(embed=discord.Embed(description=f"📂 Loaded **{len(content)}** songs.", color=COLOR_MAIN), silent=True)
         elif isinstance(content, dict):
-            await ctx.send(embed=discord.Embed(description="🔄 Loading live playlist (First 50)...", color=COLOR_MAIN))
+            await ctx.send(embed=discord.Embed(description="🔄 Loading live playlist (First 50)...", color=COLOR_MAIN), silent=True)
             try:
                 info = await self.bot.loop.run_in_executor(None, lambda: yt_dlp.YoutubeDL(YDL_PLAYLIST_LOAD_OPTS).extract_info(content['url'], download=False))
                 tracks = [{'id':e['id'], 'title':e['title'], 'author':e['uploader'], 'duration':format_time(e['duration']), 'duration_seconds':e['duration'], 'webpage':e['webpage']} for e in info['entries'] if e]
                 state.queue.extend(tracks)
-                await ctx.send(embed=discord.Embed(description=f"✅ Loaded **{len(tracks)}**. Rest loading in BG...", color=COLOR_MAIN))
+                await ctx.send(embed=discord.Embed(description=f"✅ Loaded **{len(tracks)}**. Rest loading in BG...", color=COLOR_MAIN), silent=True)
                 asyncio.create_task(self.load_rest_of_playlist(content['url'], ctx.guild.id))
-            except: await ctx.send(embed=discord.Embed(description="❌ Error loading.", color=discord.Color.red()))
+            except: await ctx.send(embed=discord.Embed(description="❌ Error loading.", color=discord.Color.red()), silent=True)
 
         if not ctx.voice_client:
             if ctx.author.voice: await ctx.author.voice.channel.connect()
@@ -1133,24 +1133,24 @@ class MusicBot(commands.Cog):
     @commands.hybrid_command(name="listplaylists")
     async def listplaylists(self, ctx):
         msg = "\n".join([f"{k}" for k in saved_playlists.keys()])
-        await ctx.send(embed=discord.Embed(title="📂 Saved Playlists", description=msg if msg else "None", color=COLOR_MAIN))
+        await ctx.send(embed=discord.Embed(title="📂 Saved Playlists", description=msg if msg else "None", color=COLOR_MAIN), silent=True)
 
     @commands.hybrid_command(name="delplaylist")
     async def delplaylist(self, ctx, name: str):
         if name in saved_playlists: 
             del saved_playlists[name]
             save_json(PLAYLIST_FILE, saved_playlists)
-            await ctx.send(embed=discord.Embed(description=f"🗑️ Deleted **{name}**.", color=COLOR_MAIN))
-        else: await ctx.send(embed=discord.Embed(description="❌ Not found.", color=discord.Color.red()))
+            await ctx.send(embed=discord.Embed(description=f"🗑️ Deleted **{name}**.", color=COLOR_MAIN), silent=True)
+        else: await ctx.send(embed=discord.Embed(description="❌ Not found.", color=discord.Color.red()), silent=True)
 
     @commands.hybrid_command(name="cache")
     async def cache_list(self, ctx):
         valid = [f for f in os.listdir(CACHE_DIR) if f.endswith('.webm')]
         data = [{'title': cache_map.get(f.replace('.webm',''), f), 'duration': 'Cached'} for f in valid]
-        if not data: return await ctx.send(embed=discord.Embed(description="Cache empty.", color=COLOR_MAIN))
+        if not data: return await ctx.send(embed=discord.Embed(description="Cache empty.", color=COLOR_MAIN), silent=True)
         data.sort(key=lambda x: x['title'])
         view = ListPaginator(data, title="Local Cache", is_queue=False)
-        await ctx.send(embed=view.get_embed(), view=view)
+        await ctx.send(embed=view.get_embed(), view=view, silent=True)
 
     @commands.hybrid_command(name="dash")
     async def dash(self, ctx):
@@ -1163,27 +1163,27 @@ class MusicBot(commands.Cog):
         embed = discord.Embed(title="🚀 Pi Stats", color=COLOR_MAIN)
         embed.add_field(name="System", value=f"CPU: `{cpu}%` | RAM: `{ram}%` | {temp}")
         embed.add_field(name="Storage", value=f"`{count}` songs | `{size:.2f} GB` / {MAX_CACHE_SIZE_GB} GB")
-        await ctx.send(embed=embed)
+        await ctx.send(embed=embed, silent=True)
 
     @commands.hybrid_command(name="search")
     async def search(self, ctx, query: str):
         await ctx.interaction.response.defer()
         info = await self.bot.loop.run_in_executor(None, lambda: yt_dlp.YoutubeDL(YDL_FLAT_OPTS).extract_info(f"ytsearch5:{query}", download=False))
-        await ctx.interaction.followup.send("🔎 **Results:**", view=SelectionView(info['entries'], self, ctx))
+        await ctx.interaction.followup.send("🔎 **Results:**", view=SelectionView(info['entries'], self, ctx), silent=True)
 
     @commands.hybrid_command(name="history")
     async def history(self, ctx):
         state = self.get_state(ctx.guild.id)
-        if not state.history: return await ctx.send(embed=discord.Embed(description="History empty.", color=COLOR_MAIN))
+        if not state.history: return await ctx.send(embed=discord.Embed(description="History empty.", color=COLOR_MAIN), silent=True)
         view = ListPaginator(list(reversed(state.history)), title="History", is_queue=False)
-        await ctx.send(embed=view.get_embed(), view=view)
+        await ctx.send(embed=view.get_embed(), view=view, silent=True)
 
     @commands.hybrid_command(name="autoplay")
     async def autoplay(self, ctx):
         state = self.get_state(ctx.guild.id)
         state.autoplay = not state.autoplay
         await self.ensure_autoplay(ctx.guild.id)
-        await ctx.send(embed=discord.Embed(description=f"📻 Auto-Play: **{'ON' if state.autoplay else 'OFF'}**", color=COLOR_MAIN))
+        await ctx.send(embed=discord.Embed(description=f"📻 Auto-Play: **{'ON' if state.autoplay else 'OFF'}**", color=COLOR_MAIN), silent=True)
 
 # ==========================================
 # 7. STARTUP
