@@ -645,8 +645,9 @@ async def api_add():
                     await channel.connect()
                     break
 
-        # Use Flat Search to match Web Dashboard behavior (proven to work)
-        info = await bot_instance.loop.run_in_executor(None, lambda: yt_dlp.YoutubeDL(YDL_FLAT_OPTS).extract_info(query, download=False))
+        # Use Deep Search for keywords (better accuracy), Flat for URLs
+        opts = YDL_FLAT_OPTS if query.startswith('http') else YDL_SEARCH_OPTS
+        info = await bot_instance.loop.run_in_executor(None, lambda: yt_dlp.YoutubeDL(opts).extract_info(query, download=False))
         
         def process(e): 
             url = e.get('webpage_url') or e.get('url') or f"https://www.youtube.com/watch?v={e['id']}"
@@ -1064,8 +1065,9 @@ class MusicBot(commands.Cog):
 
         if ctx.interaction: await ctx.interaction.response.defer()
         
-        # Use Flat Search for consistency with Web Dashboard
-        info = await self.bot.loop.run_in_executor(None, lambda: yt_dlp.YoutubeDL(YDL_FLAT_OPTS).extract_info(query, download=False))
+        # Use Deep Search for keywords (better accuracy), Flat for URLs (faster)
+        opts = YDL_FLAT_OPTS if query.startswith('http') else YDL_SEARCH_OPTS
+        info = await self.bot.loop.run_in_executor(None, lambda: yt_dlp.YoutubeDL(opts).extract_info(query, download=False))
         
         def proc(e): 
             url = e.get('webpage_url') or e.get('url') or f"https://www.youtube.com/watch?v={e['id']}"
@@ -1319,7 +1321,8 @@ class MusicBot(commands.Cog):
     @commands.hybrid_command(name="search")
     async def search(self, ctx, query: str):
         await ctx.defer()
-        info = await self.bot.loop.run_in_executor(None, lambda: yt_dlp.YoutubeDL(YDL_FLAT_OPTS).extract_info(f"ytsearch5:{query}", download=False))
+        # Deep search for accuracy in the list
+        info = await self.bot.loop.run_in_executor(None, lambda: yt_dlp.YoutubeDL(YDL_SEARCH_OPTS).extract_info(f"ytsearch5:{query}", download=False))
         view = SelectionView(info['entries'], self, ctx)
         view.message = await ctx.send("🔎 **Results:**", view=view, silent=True)
 
