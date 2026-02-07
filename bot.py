@@ -1048,23 +1048,23 @@ class MusicBot(commands.Cog):
         else:
             await ctx.send("❌ Could not start Cloudflare Tunnel. Check logs.", silent=True)
 
-    @commands.hybrid_command(name="play")
+    @commands.hybrid_command(name="play", aliases=["p"])
     async def play(self, ctx, search: str):
         await self.prepare_song(ctx, search if 'http' in search else f"ytsearch1:{search}")
 
-    @commands.hybrid_command(name="stop")
+    @commands.hybrid_command(name="stop", aliases=["dc", "leave"])
     async def stop(self, ctx): 
         await self.stop_logic(ctx.guild.id)
         embed = discord.Embed(description="👋 Stopped.", color=COLOR_MAIN)
         await ctx.send(embed=embed, silent=True)
 
-    @commands.hybrid_command(name="skip")
+    @commands.hybrid_command(name="skip", aliases=["s", "next"])
     async def skip(self, ctx): 
         ctx.voice_client.stop()
         embed = discord.Embed(description="⏭️ Skipped.", color=COLOR_MAIN)
         await ctx.send(embed=embed, silent=True)
 
-    @commands.hybrid_command(name="queue")
+    @commands.hybrid_command(name="queue", aliases=["q"])
     async def queue(self, ctx):
         state = self.get_state(ctx.guild.id)
         if not state.current_track and not state.queue:
