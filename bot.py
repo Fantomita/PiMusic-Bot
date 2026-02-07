@@ -593,7 +593,6 @@ DASHBOARD_HTML = """
     </div>
 
     <div class="container">
-        <!-- Player -->
         <div class="player-card">
             <div class="album-art-container">
                 <img src="https://via.placeholder.com/300" id="np-img" class="album-art" onerror="this.src='https://via.placeholder.com/300?text=Music'">
@@ -610,7 +609,6 @@ DASHBOARD_HTML = """
             </div>
         </div>
 
-        <!-- Search -->
         <div class="search-wrap">
             <input type="text" class="search-input" id="urlInput" placeholder="Paste YouTube URL or search..." onkeypress="handleEnter(event)">
             <button class="search-btn" onclick="searchSong()">🔍</button>
@@ -618,18 +616,15 @@ DASHBOARD_HTML = """
         <div id="loading" class="spinner"></div>
         <div id="search-results"></div>
 
-        <!-- Tabs -->
         <div class="tabs">
             <button class="tab-btn active" onclick="switchTab('queue')">Queue <span id="q-count">(0)</span></button>
             <button class="tab-btn" onclick="switchTab('playlists')">Playlists</button>
         </div>
 
-        <!-- Queue Tab -->
         <div id="tab-queue" class="section active">
             <div id="queue-list"></div>
         </div>
 
-        <!-- Playlist Tab -->
         <div id="tab-playlists" class="section">
             <div class="pl-tools">
                 <div class="pl-inputs">
@@ -846,7 +841,7 @@ DASHBOARD_HTML = """
 
         async function deletePlaylist(name) {
             if(!confirm("Delete?")) return;
-            await fetch('/api/playlists/delete', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(name: name) });
+            await fetch('/api/playlists/delete', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({name: name}) });
             fetchPlaylists();
         }
 
@@ -912,7 +907,8 @@ async def auth_route():
     
     if token_from_url == server_token:
         resp = await make_response(redirect('/'))
-        resp.set_cookie('pi_music_auth', token_from_url, max_age=86400)
+        # Using Lax SameSite policy to allow cookie to set during redirect
+        resp.set_cookie('pi_music_auth', token_from_url, max_age=86400, samesite='Lax')
         return resp
     
     log_error(f"Auth Failed. URL Token: {token_from_url}, Server Token: {server_token}")
@@ -932,6 +928,10 @@ async def home():
 async def api_status():
     guild = get_first_available_guild()
     cog = get_bot_cog()
+    
+    # Debug info
+    if not cog: log_error("API Error: Bot Cog not found in config.")
+    elif not guild: log_error(f"API Error: Bot is online but no guild found. Guilds len: {len(cog.bot.guilds) if cog and cog.bot else 'None'}")
     
     if not guild or not cog:
         return jsonify({'current': None, 'queue': [], 'guild': None, 'autoplay': False})
@@ -1348,7 +1348,7 @@ class MusicBot(commands.Cog):
         
         global bot_instance
         bot_instance = bot 
-        self.web_task = self.bot.loop.create_task(app.run_task(host='127.0.0.1', port=5000))
+        self.web_task = self.bot.loop.create_task(app.run_task(host='0.0.0.0', port=5000))
 
     async def cog_unload(self):
         self.cleanup_loop.stop()
@@ -1567,20 +1567,7 @@ class MusicBot(commands.Cog):
             return
 
         # 3. Find a seed track (last in queue, or current)
-        # If queue has items and last one is NOT suggested (or we are avoiding it), use it.
-        # Actually, if we are regenerating, the 'avoid_ids' likely contains the ID of the removed suggestion.
-        # So the seed should probably be the *previous* track.
-        
-        # Seed Logic:
-        # If queue has user tracks, use the last user track.
-        # If queue is empty, use current track.
-        # If both empty, use history.
-        
         seed = None
-        # content_queue = [t for t in state.queue if not t.get('suggested')]
-        # if content_queue: seed = content_queue[-1]
-        
-        # Simplified: Use the last non-suggested track in queue, or current
         for t in reversed(state.queue):
             if not t.get('suggested'): 
                 seed = t
@@ -1954,12 +1941,14 @@ class MusicBot(commands.Cog):
 intents = discord.Intents.default()
 intents.message_content = True
 intents.voice_states = True
+intents.guilds = True  # CRITICAL FIX for API visibility
+
 bot = commands.Bot(command_prefix='$', intents=intents)
 bot.remove_command('help') 
 
 @bot.event
 async def on_ready():
-    log_info(f'Logged in as {bot.user}')
+    log_info(f'✅ Logged in as {bot.user}')
     global bot_instance
     bot_instance = bot 
     await bot.change_presence(activity=discord.Activity(type=discord.ActivityType.listening, name="$help"))
