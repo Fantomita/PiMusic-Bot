@@ -636,8 +636,8 @@ async def api_add():
                     await channel.connect()
                     break
 
-        opts = YDL_FLAT_OPTS if query.startswith('http') else YDL_SEARCH_OPTS
-        info = await bot_instance.loop.run_in_executor(None, lambda: yt_dlp.YoutubeDL(opts).extract_info(query, download=False))
+        # Use Flat Search to match Web Dashboard behavior (proven to work)
+        info = await bot_instance.loop.run_in_executor(None, lambda: yt_dlp.YoutubeDL(YDL_FLAT_OPTS).extract_info(query, download=False))
         
         def process(e): 
             url = e.get('webpage_url') or e.get('url') or f"https://www.youtube.com/watch?v={e['id']}"
@@ -687,7 +687,7 @@ class SelectionMenu(ui.Select):
         options = []
         for entry in entries[:10]:
             title = (entry.get('title', 'Unknown')[:90] + '..') if len(entry.get('title', '')) > 90 else entry.get('title', 'Unknown')
-            val = entry.get('id') or entry.get('url')
+            val = f"https://www.youtube.com/watch?v={entry['id']}" if entry.get('id') else entry.get('url')
             if val: options.append(discord.SelectOption(label=title, value=val))
         super().__init__(placeholder="Select a song...", options=options)
         self.cog, self.ctx = cog, ctx
@@ -1004,9 +1004,8 @@ class MusicBot(commands.Cog):
 
         if ctx.interaction: await ctx.interaction.response.defer()
         
-        # Use Deep Search for keywords, Flat for URLs
-        opts = YDL_FLAT_OPTS if query.startswith('http') else YDL_SEARCH_OPTS
-        info = await self.bot.loop.run_in_executor(None, lambda: yt_dlp.YoutubeDL(opts).extract_info(query, download=False))
+        # Use Flat Search for consistency with Web Dashboard
+        info = await self.bot.loop.run_in_executor(None, lambda: yt_dlp.YoutubeDL(YDL_FLAT_OPTS).extract_info(query, download=False))
         
         def proc(e): 
             url = e.get('webpage_url') or e.get('url') or f"https://www.youtube.com/watch?v={e['id']}"
