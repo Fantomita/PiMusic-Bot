@@ -1,0 +1,8 @@
+discord.py
+yt-dlp
+quart
+pyngrok
+python-dotenv
+psutil
+gpiozero
+PyNaCl

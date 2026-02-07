@@ -1,0 +1,25 @@
+# Secrets
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Logs
+bot_logs.txt
+
+# Music Cache & Data
+music_cache/
+cache_map.json
+playlists.json
+server_settings.json
+
+# Backups
+*.bk
+
+# Environment
+.venv/
+env/
+venv/
+ENV/
