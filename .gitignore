@@ -27,3 +27,5 @@ ENV/
 # Temporary/Working files
 bot_working_play_and_search.py
 musicbot.tar.gz
+new_bot.py
+cloudflared
