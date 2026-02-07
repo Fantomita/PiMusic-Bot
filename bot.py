@@ -75,6 +75,7 @@ COMMON_YDL_ARGS = {'quiet': True, 'no_warnings': True, 'noplaylist': True, 'sock
 
 YDL_PLAY_OPTS = {'format': 'bestaudio[ext=webm]/bestaudio/best', **COMMON_YDL_ARGS}
 YDL_FLAT_OPTS = {'extract_flat': 'in_playlist', **COMMON_YDL_ARGS}
+YDL_SEARCH_OPTS = {'extract_flat': False, **COMMON_YDL_ARGS} # Deep search for accuracy
 YDL_MIX_OPTS = {'extract_flat': 'in_playlist', 'playlist_items': '1-20', **COMMON_YDL_ARGS, 'noplaylist': False}
 
 # Thumbnails enabled + JPG conversion (From Pretty)
@@ -923,7 +924,9 @@ class MusicBot(commands.Cog):
 
         if ctx.interaction: await ctx.interaction.response.defer()
         
-        info = await self.bot.loop.run_in_executor(None, lambda: yt_dlp.YoutubeDL(YDL_FLAT_OPTS).extract_info(query, download=False))
+        # Use Deep Search for keywords, Flat for URLs
+        opts = YDL_FLAT_OPTS if query.startswith('http') else YDL_SEARCH_OPTS
+        info = await self.bot.loop.run_in_executor(None, lambda: yt_dlp.YoutubeDL(opts).extract_info(query, download=False))
         def proc(e): return {'id': e['id'], 'title': e['title'], 'author': e['uploader'], 'duration': format_time(e['duration']), 'duration_seconds': e['duration'], 'webpage': e['url']}
         
         async def send_res(msg):
