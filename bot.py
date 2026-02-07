@@ -325,8 +325,10 @@ DASHBOARD_HTML = """
                 data.queue.forEach((track, index) => {
                     const div = document.createElement('div');
                     div.className = 'list-item';
+                    if (track.suggested) div.style.opacity = '0.6';
                     const thumb = track.thumbnail ? track.thumbnail : 'https://via.placeholder.com/40';
-                    div.innerHTML = `<div class="item-info"><img src="${thumb}" class="list-thumb"><div class="item-text"><div class="item-title">${index + 1}. ${track.title}</div></div></div><button class="btn-del" onclick="removeTrack(${index})">✕</button>`;
+                    const badge = track.suggested ? ' <span style="font-size:0.7em; background:var(--accent); color:black; padding:2px 6px; border-radius:4px;">✨ Autoplay</span>' : '';
+                    div.innerHTML = `<div class="item-info"><img src="${thumb}" class="list-thumb"><div class="item-text"><div class="item-title">${index + 1}. ${track.title}${badge}</div></div></div><button class="btn-del" onclick="removeTrack(${index})">✕</button>`;
                     qList.appendChild(div);
                 });
             } catch (e) { document.getElementById('status-badge').classList.remove('online'); }
@@ -438,7 +440,8 @@ async def api_status():
         queue_data.append({
             'title': t['title'],
             'id': t['id'],
-            'thumbnail': get_thumbnail_url(t['id'])
+            'thumbnail': get_thumbnail_url(t['id']),
+            'suggested': t.get('suggested', False)
         })
         
     return jsonify({'current': current, 'queue': queue_data, 'guild': guild.name, 'autoplay': state.autoplay})
@@ -572,6 +575,9 @@ async def api_add():
     if not re.match(r'^https?://', query): query = f"ytsearch1:{query}"
     
     if not state.last_text_channel: state.last_text_channel = guild.text_channels[0]
+    
+    # Clear suggestions so user song plays next
+    state.queue = [t for t in state.queue if not t.get('suggested')]
 
     try:
         # Try to connect if not in VC
@@ -592,6 +598,9 @@ async def api_add():
                  def __init__(self, g, v): self.guild, self.voice_client, self.author = g, v, "WebUser"
                  async def send(self, *args, **kwargs): pass 
              await cog.play_next(DummyCtx(guild, guild.voice_client))
+        else:
+             bot_instance.loop.create_task(cog.ensure_autoplay(guild.id))
+
         return jsonify({'status':'ok'})
     except: return jsonify({'error':'fail'}), 500
 
@@ -685,7 +694,9 @@ class ListPaginator(ui.View):
         else:
             desc_lines = []
             for i, s in enumerate(self.data_list[start:end]):
-                if isinstance(s, dict): line = f"`{start+i+1}.` **{s['title']}** ({s.get('duration', '?:??')})"
+                if isinstance(s, dict): 
+                    prefix = "✨ " if s.get('suggested') else ""
+                    line = f"`{start+i+1}.` {prefix}**{s['title']}** ({s.get('duration', '?:??')})"
                 else: line = f"`{start+i+1}.` {s}"
                 desc_lines.append(line)
             desc = "\n".join(desc_lines)
@@ -862,11 +873,46 @@ class MusicBot(commands.Cog):
                 if ch: await ch.send(f"✅ Loaded {count} more tracks in background.", silent=True)
         except: pass
 
+    async def ensure_autoplay(self, guild_id):
+        state = self.get_state(guild_id)
+        
+        # 1. If Autoplay is OFF, remove any suggested tracks
+        if not state.autoplay:
+            state.queue = [t for t in state.queue if not t.get('suggested')]
+            return
+
+        # 2. If we already have a suggestion at the end, do nothing
+        if state.queue and state.queue[-1].get('suggested'):
+            return
+
+        # 3. Find a seed track (last in queue, or current)
+        seed = state.queue[-1] if state.queue else state.current_track
+        if not seed and state.history: seed = state.history[-1]
+        
+        if not seed: return
+
+        # 4. Fetch recommendation
+        try:
+            # Run in executor to avoid blocking
+            info = await self.bot.loop.run_in_executor(None, lambda: yt_dlp.YoutubeDL(YDL_MIX_OPTS).extract_info(f"https://www.youtube.com/watch?v={seed['id']}&list=RD{seed['id']}", download=False))
+            if 'entries' in info:
+                for e in info['entries']:
+                    # Don't add if it's the seed itself (basic dupe check)
+                    if e['id'] != seed['id']: 
+                        track = {'id':e['id'], 'title':e['title'], 'author':e['uploader'], 'duration':format_time(e['duration']), 'duration_seconds':e['duration'], 'webpage':e['url'], 'suggested': True}
+                        state.queue.append(track)
+                        break
+        except Exception as e:
+            log_error(f"Autoplay fetch failed: {e}")
+
     async def prepare_song(self, ctx, query):
         state = self.get_state(ctx.guild.id)
         state.last_interaction = datetime.datetime.now()
         state.stopping = False
         if hasattr(ctx, 'channel'): state.last_text_channel = ctx.channel
+        
+        # Clear suggestions so user song plays next
+        state.queue = [t for t in state.queue if not t.get('suggested')]
         
         # Robust VC Join Logic from Working, but returning Embeds from Pretty
         if not ctx.voice_client:
@@ -892,6 +938,9 @@ class MusicBot(commands.Cog):
             if ctx.voice_client.is_playing(): await send_res(f"✅ Queued: **{info['title']}**")
             
         if not ctx.voice_client.is_playing(): await self.play_next(ctx)
+        else: 
+            # If playing, ensure we have an autoplay queued after this new one
+            self.bot.loop.create_task(self.ensure_autoplay(ctx.guild.id))
 
     async def play_next(self, ctx):
         state = self.get_state(ctx.guild.id)
@@ -900,17 +949,8 @@ class MusicBot(commands.Cog):
              return
         if state.processing_next: return
         
-        if not state.queue and state.autoplay and state.history:
-            last = state.history[-1]
-            try:
-                info = await self.bot.loop.run_in_executor(None, lambda: yt_dlp.YoutubeDL(YDL_MIX_OPTS).extract_info(f"https://www.youtube.com/watch?v={last['id']}&list=RD{last['id']}", download=False))
-                if 'entries' in info:
-                    for e in info['entries']:
-                        if e['id'] != last['id']: 
-                            state.queue.append({'id':e['id'], 'title':e['title'], 'author':e['uploader'], 'duration':format_time(e['duration']), 'duration_seconds':e['duration'], 'webpage':e['url']})
-                            break
-            except: pass
-
+        # Removed old synchronous autoplay logic here
+        
         if state.queue:
             state.processing_next = True 
             next_song = state.queue.pop(0)
@@ -942,10 +982,14 @@ class MusicBot(commands.Cog):
                 ctx.voice_client.play(source, after=lambda e: self.bot.loop.create_task(self.play_next(ctx)))
                 state.processing_next = False 
                 
+                # Trigger autoplay prefetch for the NEXT song
+                self.bot.loop.create_task(self.ensure_autoplay(ctx.guild.id))
+                
                 embed = discord.Embed(title="🎶 Now Playing", description=f"**[{next_song['title']}]({next_song['webpage']})**", color=COLOR_MAIN)
                 embed.set_thumbnail(url=f"https://i.ytimg.com/vi/{next_song['id']}/mqdefault.jpg")
                 embed.add_field(name="Author", value=next_song['author'])
                 embed.add_field(name="Duration", value=next_song['duration'])
+                if next_song.get('suggested'): embed.set_footer(text="✨ Autoplay Suggestion")
                 
                 ch = self.get_notification_channel(ctx.guild)
                 if ch: await ch.send(embed=embed, view=MusicControlView(self, ctx.guild.id))
@@ -1138,6 +1182,7 @@ class MusicBot(commands.Cog):
     async def autoplay(self, ctx):
         state = self.get_state(ctx.guild.id)
         state.autoplay = not state.autoplay
+        await self.ensure_autoplay(ctx.guild.id)
         await ctx.send(embed=discord.Embed(description=f"📻 Auto-Play: **{'ON' if state.autoplay else 'OFF'}**", color=COLOR_MAIN))
 
 # ==========================================
