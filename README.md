@@ -5,7 +5,7 @@ A feature-rich Discord Music Bot with a built-in Web Dashboard, local caching fo
 ## 🚀 Features
 
 - **High-Quality Audio:** Powered by `yt-dlp` and `ffmpeg`.
-- **Web Dashboard:** Control playback, search songs, and manage the queue from any browser (tunnelled via `ngrok`).
+- **Web Dashboard:** Control playback, search songs, and manage the queue from any browser (tunnelled via **Cloudflare Tunnel** - No timeouts, no warnings!).
 - **Local Caching:** Automatically saves played tracks to disk to save bandwidth and reduce loading times.
 - **Smart Playlists:** Save your current queue or load existing YouTube playlists.
 - **Auto-Play:** Keep the music going with related track suggestions.
@@ -22,8 +22,8 @@ A feature-rich Discord Music Bot with a built-in Web Dashboard, local caching fo
 
 ### 2. Clone the Repository
 ```bash
-git clone <your-repo-url>
-cd musicbot
+git clone https://github.com/Fantomita/PiMusic-Bot.git
+cd PiMusic-Bot
 ```
 
 ### 3. Install Dependencies
@@ -32,11 +32,11 @@ pip install -r requirements.txt
 ```
 
 ### 4. Configuration
-Create a `.env` file in the root directory and add your tokens:
+Create a `.env` file in the root directory and add your bot token:
 ```ini
 DISCORD_TOKEN=your_discord_bot_token_here
-NGROK_AUTH_TOKEN=your_ngrok_auth_token_here
 ```
+*(No ngrok token required! The bot automatically downloads and configures Cloudflare Tunnel.)*
 
 ## 🎮 Usage
 
@@ -47,13 +47,15 @@ python bot.py
 
 ### Discord Commands
 - `/play [search or url]` - Play a song or playlist.
-- `/link` - Get the secure link to the Web Dashboard.
+- `/link` - Generate a secure link to the Web Dashboard (Bot auto-joins your VC!).
 - `/queue` - View the current music queue.
 - `/stop` - Stop the music and disconnect.
 - `/help` - View all available commands.
 
 ### Web Dashboard
-Use the `/link` command in Discord to generate a unique, authenticated URL for the control panel. No login required once you use the link.
+Use the `/link` command in Discord to generate a unique, authenticated URL (`...trycloudflare.com`) for the control panel.
+- **Auto-Install:** On the first run, the bot will automatically download the `cloudflared` binary for your system (AMD64, ARM64, or ARM).
+- **Secure:** Each link is protected by a unique session token.
 
 ## ⚙️ Hardware Support (Optional)
 If running on a Raspberry Pi, the bot supports a status LED on **GPIO Pin 17** which lights up during playback.
