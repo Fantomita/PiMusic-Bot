@@ -1167,9 +1167,9 @@ class MusicBot(commands.Cog):
 
     @commands.hybrid_command(name="search")
     async def search(self, ctx, query: str):
-        await ctx.interaction.response.defer()
+        await ctx.defer()
         info = await self.bot.loop.run_in_executor(None, lambda: yt_dlp.YoutubeDL(YDL_FLAT_OPTS).extract_info(f"ytsearch5:{query}", download=False))
-        await ctx.interaction.followup.send("🔎 **Results:**", view=SelectionView(info['entries'], self, ctx), silent=True)
+        await ctx.send("🔎 **Results:**", view=SelectionView(info['entries'], self, ctx), silent=True)
 
     @commands.hybrid_command(name="history")
     async def history(self, ctx):
