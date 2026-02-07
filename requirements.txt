@@ -4,5 +4,4 @@ quart
 requests
 python-dotenv
 psutil
-gpiozero
 PyNaCl

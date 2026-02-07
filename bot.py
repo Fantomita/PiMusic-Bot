@@ -42,14 +42,6 @@ logging.basicConfig(
 def log_error(msg): logging.error(msg)
 def log_info(msg): logging.info(msg)
 
-try:
-    from gpiozero import LED
-    status_led = LED(17)
-    log_info("✅ GPIO LED enabled on Pin 17")
-except Exception:
-    status_led = None
-    log_info("⚠️ GPIO disabled")
-
 sys.dont_write_bytecode = True
 try: os.nice(-15)
 except: pass
@@ -820,7 +812,6 @@ class MusicBot(commands.Cog):
             await asyncio.sleep(0.5)
 
     async def stop_logic(self, guild_id):
-        if status_led: status_led.off() 
         # Don't kill tunnel on stop, only on unload
         if guild_id not in self.states: return
         guild = self.bot.get_guild(guild_id)
@@ -906,7 +897,6 @@ class MusicBot(commands.Cog):
         state = self.get_state(ctx.guild.id)
         # Added is_connected() check from Working
         if state.stopping or not ctx.guild.voice_client or not ctx.guild.voice_client.is_connected():
-             if status_led: status_led.off()
              return
         if state.processing_next: return
         
@@ -950,7 +940,6 @@ class MusicBot(commands.Cog):
                     source = await discord.FFmpegOpusAudio.from_probe(info['url'], **opts)
 
                 ctx.voice_client.play(source, after=lambda e: self.bot.loop.create_task(self.play_next(ctx)))
-                if status_led: status_led.on()
                 state.processing_next = False 
                 
                 embed = discord.Embed(title="🎶 Now Playing", description=f"**[{next_song['title']}]({next_song['webpage']})**", color=COLOR_MAIN)
@@ -969,7 +958,6 @@ class MusicBot(commands.Cog):
         else:
             state.current_track = None
             state.processing_next = False
-            if status_led: status_led.off()
 
     # --- COMMANDS ---
     @commands.hybrid_command(name="help", description="Show all commands")

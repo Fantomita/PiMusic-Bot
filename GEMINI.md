@@ -1,7 +1,7 @@
 # MusicBot Project Context
 
 ## Project Overview
-This is a comprehensive Discord Music Bot featuring a local web dashboard, audio caching, and playlist management. It is designed to run on a Linux environment (specifically optimized for Raspberry Pi with GPIO support).
+This is a comprehensive Discord Music Bot featuring a local web dashboard, audio caching, and playlist management. It is designed to run on a Linux environment (specifically optimized for Raspberry Pi).
 
 **Key Features:**
 *   **Music Playback:** High-quality streaming and downloading via `yt-dlp` and `ffmpeg`.
@@ -29,7 +29,7 @@ This is a comprehensive Discord Music Bot featuring a local web dashboard, audio
 
 ### Dependencies
 ```bash
-pip install discord.py yt-dlp quart requests python-dotenv psutil gpiozero pynacl
+pip install discord.py yt-dlp quart requests python-dotenv psutil pynacl
 ```
 
 ### Environment Variables (.env)

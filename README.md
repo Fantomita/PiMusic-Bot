@@ -57,8 +57,5 @@ Use the `/link` command in Discord to generate a unique, authenticated URL (`...
 - **Auto-Install:** On the first run, the bot will automatically download the `cloudflared` binary for your system (AMD64, ARM64, or ARM).
 - **Secure:** Each link is protected by a unique session token.
 
-## ⚙️ Hardware Support (Optional)
-If running on a Raspberry Pi, the bot supports a status LED on **GPIO Pin 17** which lights up during playback.
-
 ## 📜 License
 [MIT](LICENSE)
