@@ -62,9 +62,15 @@ python bot.py
 ### Discord Commands
 
 - `/play [search or url]` - Play a song or playlist.
-- `/link` - Generate a secure link to the Web Dashboard (Bot must be in a Voice Channel).
+- `/autoplay` - Toggle Auto-Play mode (suggests related songs).
+- `/new` - Regenerate the current Auto-Play suggestion.
+- `/link` - Generate a secure link to the Web Dashboard.
+- `/setchannel` - Bind the bot to the current text channel for notifications.
 - `/queue` - View the current music queue.
+- `/history` - View recently played tracks.
+- `/search [query]` - Search for songs with interactive results.
 - `/stop` - Stop the music, save session cache, and disconnect.
+- `/dash` - Monitor system performance and storage stats.
 - `/help` - View all available commands.
 
 ### Web Dashboard

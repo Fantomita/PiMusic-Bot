@@ -1501,6 +1501,10 @@ class MusicBot(commands.Cog):
                 
             state = self.states[gid]
             if guild.voice_client:
+                # FIX: Reset the timer while music is playing
+                if guild.voice_client.is_playing():
+                    state.last_interaction = now
+
                 is_alone = len(guild.voice_client.channel.members) == 1
                 is_idle = not guild.voice_client.is_playing() and (now - state.last_interaction).total_seconds() > 300
                 
