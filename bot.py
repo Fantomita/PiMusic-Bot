@@ -859,22 +859,30 @@ DASHBOARD_HTML = """
 """
 
 # --- Auth Helpers ---
+def get_bot_cog():
+    """Reliably retrieves the MusicBot cog instance."""
+    if 'BOT_COG' in app.config:
+        return app.config['BOT_COG']
+    # Fallback to global search
+    if bot_instance:
+        return bot_instance.get_cog('MusicBot')
+    return None
+
 def get_first_available_guild():
     """Returns the first guild the bot is connected to (for single-server setups)."""
-    if not bot_instance:
-        return None
-    if bot_instance.voice_clients:
-        return bot_instance.voice_clients[0].guild
-    if bot_instance.guilds:
-        return bot_instance.guilds[0]
+    cog = get_bot_cog()
+    if cog and cog.bot:
+        if cog.bot.voice_clients:
+            return cog.bot.voice_clients[0].guild
+        if cog.bot.guilds:
+            return cog.bot.guilds[0]
     return None
 
 def get_bot_token():
     """Retrieves the secure web token from the bot instance."""
-    if bot_instance:
-        cog = bot_instance.get_cog('MusicBot')
-        if cog:
-            return cog.web_auth_token
+    cog = get_bot_cog()
+    if cog:
+        return cog.web_auth_token
     return None
 
 # --- Routes ---
@@ -906,7 +914,8 @@ async def auth_route():
         resp = await make_response(redirect('/'))
         resp.set_cookie('pi_music_auth', token_from_url, max_age=86400)
         return resp
-        
+    
+    log_error(f"Auth Failed. URL Token: {token_from_url}, Server Token: {server_token}")
     return "❌ Invalid Token.", 403
 
 @app.route('/cache/thumb/<path:filename>')
@@ -922,10 +931,11 @@ async def home():
 @app.route('/api/status')
 async def api_status():
     guild = get_first_available_guild()
-    if not guild:
+    cog = get_bot_cog()
+    
+    if not guild or not cog:
         return jsonify({'current': None, 'queue': [], 'guild': None, 'autoplay': False})
     
-    cog = bot_instance.get_cog('MusicBot')
     state = cog.get_state(guild.id)
     
     current = None
@@ -977,10 +987,10 @@ async def api_save_playlist():
     
     # Save current queue
     guild = get_first_available_guild()
-    if not guild:
+    cog = get_bot_cog()
+    if not guild or not cog:
         return jsonify({'error': 'No guild'}), 400
         
-    cog = bot_instance.get_cog('MusicBot')
     state = cog.get_state(guild.id)
     
     tracks = []
@@ -1013,10 +1023,10 @@ async def api_load_playlist():
         return jsonify({'error': 'Not found'}), 404
         
     guild = get_first_available_guild()
-    if not guild:
+    cog = get_bot_cog()
+    if not guild or not cog:
         return jsonify({'error': 'No guild'}), 400
         
-    cog = bot_instance.get_cog('MusicBot')
     state = cog.get_state(guild.id)
     content = saved_playlists[name]
     new_tracks = []
@@ -1025,7 +1035,7 @@ async def api_load_playlist():
         new_tracks = content
     elif isinstance(content, dict):
         try:
-            info = await bot_instance.loop.run_in_executor(None, lambda: yt_dlp.YoutubeDL(YDL_PLAYLIST_LOAD_OPTS).extract_info(content['url'], download=False))
+            info = await cog.bot.loop.run_in_executor(None, lambda: yt_dlp.YoutubeDL(YDL_PLAYLIST_LOAD_OPTS).extract_info(content['url'], download=False))
             if 'entries' in info:
                 for e in info['entries']:
                     if e:
@@ -1075,8 +1085,10 @@ async def api_del_playlist():
 @app.route('/api/search', methods=['POST'])
 async def api_search():
     data = await request.get_json()
+    cog = get_bot_cog()
+    if not cog: return jsonify([]), 500
     try:
-        info = await bot_instance.loop.run_in_executor(None, lambda: yt_dlp.YoutubeDL(YDL_FLAT_OPTS).extract_info(f"ytsearch5:{data['query']}", download=False))
+        info = await cog.bot.loop.run_in_executor(None, lambda: yt_dlp.YoutubeDL(YDL_FLAT_OPTS).extract_info(f"ytsearch5:{data['query']}", download=False))
         res = []
         if 'entries' in info:
             for e in info['entries']:
@@ -1099,19 +1111,19 @@ async def api_search():
 @app.route('/api/control/<action>', methods=['POST'])
 async def api_control(action):
     guild = get_first_available_guild()
-    if not guild:
+    cog = get_bot_cog()
+    if not guild or not cog:
         return jsonify({'error': 'No guild'}), 400
         
     vc = guild.voice_client
-    cog = bot_instance.get_cog('MusicBot')
     state = cog.get_state(guild.id)
     
-    if action == 'pause': 
+    if action == 'pause' and vc: 
         if vc.is_playing():
             vc.pause() 
         elif vc.is_paused():
             vc.resume()
-    elif action == 'skip':
+    elif action == 'skip' and vc:
         vc.stop()
     elif action == 'shuffle':
         random.shuffle(state.queue)
@@ -1125,9 +1137,11 @@ async def api_control(action):
 @app.route('/api/remove/<int:index>', methods=['POST'])
 async def api_remove(index):
     guild = get_first_available_guild()
-    cog = bot_instance.get_cog('MusicBot')
-    state = cog.get_state(guild.id)
+    cog = get_bot_cog()
+    if not guild or not cog:
+        return jsonify({'error': 'No guild'}), 400
     
+    state = cog.get_state(guild.id)
     if 0 <= index < len(state.queue):
         del state.queue[index]
     return jsonify({'status': 'ok'})
@@ -1136,9 +1150,11 @@ async def api_remove(index):
 async def api_add():
     data = await request.get_json()
     guild = get_first_available_guild()
-    cog = bot_instance.get_cog('MusicBot')
-    state = cog.get_state(guild.id)
+    cog = get_bot_cog()
+    if not guild or not cog:
+        return jsonify({'error': 'No guild'}), 400
     
+    state = cog.get_state(guild.id)
     query = data['query']
     if not re.match(r'^https?://', query):
         query = f"ytsearch1:{query}"
@@ -1158,7 +1174,7 @@ async def api_add():
                     break
 
         # Use Flat Options (verified working)
-        info = await bot_instance.loop.run_in_executor(None, lambda: yt_dlp.YoutubeDL(YDL_FLAT_OPTS).extract_info(query, download=False))
+        info = await cog.bot.loop.run_in_executor(None, lambda: yt_dlp.YoutubeDL(YDL_FLAT_OPTS).extract_info(query, download=False))
         
         def process(e): 
             url = e.get('webpage_url') or e.get('url') or f"https://www.youtube.com/watch?v={e['id']}"
@@ -1186,7 +1202,7 @@ async def api_add():
              
              await cog.play_next(DummyCtx(guild, guild.voice_client))
         else:
-             bot_instance.loop.create_task(cog.ensure_autoplay(guild.id))
+             cog.bot.loop.create_task(cog.ensure_autoplay(guild.id))
 
         return jsonify({'status':'ok'})
     except Exception:
@@ -1327,9 +1343,12 @@ class MusicBot(commands.Cog):
         self.web_auth_token = str(uuid4())
         self.tunnel_proc = None
         
+        # Store direct reference for reliable access in Quart
+        app.config['BOT_COG'] = self
+        
         global bot_instance
         bot_instance = bot 
-        self.web_task = self.bot.loop.create_task(app.run_task(host='0.0.0.0', port=5000))
+        self.web_task = self.bot.loop.create_task(app.run_task(host='127.0.0.1', port=5000))
 
     async def cog_unload(self):
         self.cleanup_loop.stop()
@@ -1375,8 +1394,9 @@ class MusicBot(commands.Cog):
         try: subprocess.run(["pkill", "-f", "cloudflared tunnel"], capture_output=True)
         except: pass
 
+        # Use 127.0.0.1 to avoid IPv6/localhost resolution issues
         self.tunnel_proc = subprocess.Popen(
-            ["./cloudflared", "tunnel", "--url", "http://localhost:5000"],
+            ["./cloudflared", "tunnel", "--url", "http://127.0.0.1:5000"],
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True
@@ -1384,9 +1404,18 @@ class MusicBot(commands.Cog):
 
         # Scrape URL from stderr (Cloudflared logs to stderr)
         start_time = time.time()
-        while time.time() - start_time < 15:
+        while time.time() - start_time < 20:
+            # Check if process crashed
+            if self.tunnel_proc.poll() is not None:
+                err = self.tunnel_proc.stderr.read()
+                log_error(f"❌ Cloudflared crashed: {err}")
+                return None
+
             line = self.tunnel_proc.stderr.readline()
-            if not line: break
+            if not line:
+                await asyncio.sleep(0.1)
+                continue
+
             if "trycloudflare.com" in line:
                 match = re.search(r'https://[a-zA-Z0-9-]+\.trycloudflare\.com', line)
                 if match:
