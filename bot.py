@@ -9,6 +9,12 @@ import random
 import re
 import sys
 import signal
+import platform
+import stat
+import shutil
+import requests
+import subprocess
+import time
 from uuid import uuid4
 from dotenv import load_dotenv
 
@@ -19,7 +25,6 @@ import yt_dlp
 
 # --- Import Web Dashboard ---
 from quart import Quart, render_template_string, request, jsonify, make_response, redirect, send_from_directory
-from pyngrok import ngrok, conf
 
 # ==========================================
 # 1. SETUP & CONFIGURATION
@@ -51,7 +56,6 @@ except: pass
 
 load_dotenv()
 TOKEN = os.getenv('DISCORD_TOKEN')
-NGROK_TOKEN = os.getenv('NGROK_AUTH_TOKEN')
 
 if not TOKEN:
     log_error("❌ ERROR: DISCORD_TOKEN missing.")
@@ -717,6 +721,7 @@ class MusicBot(commands.Cog):
         self.cleanup_loop.start()
         self.public_url = None
         self.web_auth_token = str(uuid4())
+        self.tunnel_proc = None
         
         global bot_instance
         bot_instance = bot 
@@ -724,8 +729,65 @@ class MusicBot(commands.Cog):
 
     async def cog_unload(self):
         self.cleanup_loop.stop()
-        ngrok.kill()
+        if self.tunnel_proc:
+            try: self.tunnel_proc.terminate()
+            except: pass
         if self.web_task: self.web_task.cancel()
+
+    def ensure_cloudflared(self):
+        """Downloads the correct cloudflared binary for the system."""
+        if os.path.exists("./cloudflared"): return True
+        
+        arch = platform.machine().lower()
+        if arch in ['x86_64', 'amd64']: c_arch = 'amd64'
+        elif arch in ['aarch64', 'arm64']: c_arch = 'arm64'
+        else: c_arch = 'arm' # Pi Zero / Pi 2 / Pi 3 32-bit
+        
+        url = f"https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-{c_arch}"
+        log_info(f"⬇️ Downloading Cloudflared ({c_arch})...")
+        
+        try:
+            r = requests.get(url, stream=True)
+            with open("./cloudflared", 'wb') as f:
+                shutil.copyfileobj(r.raw, f)
+            st = os.stat("./cloudflared")
+            os.chmod("./cloudflared", st.st_mode | stat.S_IEXEC)
+            log_info("✅ Cloudflared installed.")
+            return True
+        except Exception as e:
+            log_error(f"❌ Failed to download cloudflared: {e}")
+            return False
+
+    async def start_cloudflared(self):
+        """Starts the tunnel and retrieves the URL."""
+        if self.public_url: return self.public_url
+        
+        if not self.ensure_cloudflared(): return None
+        
+        # Kill existing
+        try: subprocess.run(["pkill", "-f", "cloudflared tunnel"], capture_output=True)
+        except: pass
+
+        self.tunnel_proc = subprocess.Popen(
+            ["./cloudflared", "tunnel", "--url", "http://localhost:5000"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True
+        )
+
+        # Scrape URL from stderr (Cloudflared logs to stderr)
+        start_time = time.time()
+        while time.time() - start_time < 15:
+            line = self.tunnel_proc.stderr.readline()
+            if not line: break
+            if "trycloudflare.com" in line:
+                match = re.search(r'https://[a-zA-Z0-9-]+\.trycloudflare\.com', line)
+                if match:
+                    self.public_url = match.group(0)
+                    log_info(f"🌍 Tunnel Active: {self.public_url}")
+                    return self.public_url
+            await asyncio.sleep(0.1)
+        return None
 
     @commands.Cog.listener()
     async def on_command_error(self, ctx, error):
@@ -757,7 +819,7 @@ class MusicBot(commands.Cog):
 
     async def stop_logic(self, guild_id):
         if status_led: status_led.off() 
-        self.public_url = None
+        # Don't kill tunnel on stop, only on unload
         if guild_id not in self.states: return
         guild = self.bot.get_guild(guild_id)
         state = self.states[guild_id]
@@ -932,21 +994,25 @@ class MusicBot(commands.Cog):
 
     @commands.hybrid_command(name="link")
     async def link(self, ctx):
-        if not self.public_url:
-             http_tunnel = await self.bot.loop.run_in_executor(None, lambda: ngrok.connect("127.0.0.1:5000", bind_tls=True))
-             self.public_url = http_tunnel.public_url
+        await ctx.defer()
         
-        # Auto-join VC when link is requested
+        # Auto-join VC
         if not ctx.voice_client and ctx.author.voice:
-            try:
-                await ctx.author.voice.channel.connect()
+            try: await ctx.author.voice.channel.connect()
             except: pass
 
-        secure_link = f"{self.public_url}/auth?token={self.web_auth_token}"
-        embed = discord.Embed(title="🎛️ Web Dashboard", description="Click below to open the control panel.", color=COLOR_MAIN)
-        view = ui.View()
-        view.add_item(ui.Button(label="Open Dashboard", url=secure_link))
-        await ctx.send(embed=embed, view=view)
+        if not self.public_url:
+             self.public_url = await self.start_cloudflared()
+        
+        if self.public_url:
+            secure_link = f"{self.public_url}/auth?token={self.web_auth_token}"
+            embed = discord.Embed(title="🎛️ Web Dashboard", description="Click below to open the control panel.", color=COLOR_MAIN)
+            embed.set_footer(text="Powered by Cloudflare Tunnel ☁️")
+            view = ui.View()
+            view.add_item(ui.Button(label="Open Dashboard", url=secure_link))
+            await ctx.send(embed=embed, view=view)
+        else:
+            await ctx.send("❌ Could not start Cloudflare Tunnel. Check logs.")
 
     @commands.hybrid_command(name="play")
     async def play(self, ctx, search: str):
@@ -1115,7 +1181,7 @@ async def main():
     except KeyboardInterrupt: pass
     finally:
         if not bot.is_closed(): await bot.close()
-        ngrok.kill()
+        log_info("👋 Bot Shutdown.")
 
 if __name__ == "__main__":
     asyncio.run(main())
