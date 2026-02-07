@@ -762,7 +762,9 @@ class MusicBot(commands.Cog):
         """Starts the tunnel and retrieves the URL."""
         if self.public_url: return self.public_url
         
-        if not self.ensure_cloudflared(): return None
+        # Download in background thread to avoid blocking heartbeat
+        if not await self.bot.loop.run_in_executor(None, self.ensure_cloudflared):
+            return None
         
         # Kill existing
         try: subprocess.run(["pkill", "-f", "cloudflared tunnel"], capture_output=True)
