@@ -335,7 +335,13 @@ DASHBOARD_HTML = """
                     if (track.suggested) div.style.opacity = '0.6';
                     const thumb = track.thumbnail ? track.thumbnail : 'https://via.placeholder.com/40';
                     const badge = track.suggested ? ' <span style="font-size:0.7em; background:var(--accent); color:black; padding:2px 6px; border-radius:4px;">✨ Autoplay</span>' : '';
-                    div.innerHTML = `<div class="item-info"><img src="${thumb}" class="list-thumb"><div class="item-text"><div class="item-title">${index + 1}. ${track.title}${badge}</div></div></div><button class="btn-del" onclick="removeTrack(${index})">✕</button>`;
+                    
+                    let buttons = `<button class="btn-del" onclick="removeTrack(${index})">✕</button>`;
+                    if (track.suggested) {
+                        buttons = `<button class="btn-del" onclick="regenerateSuggestion()" style="background:rgba(255,215,0,0.2); color:var(--accent); margin-right:5px; font-size:1.2em;" title="Regenerate">🎲</button>` + buttons;
+                    }
+                    
+                    div.innerHTML = `<div class="item-info"><img src="${thumb}" class="list-thumb"><div class="item-text"><div class="item-title">${index + 1}. ${track.title}${badge}</div></div></div><div style="display:flex;">${buttons}</div>`;
                     qList.appendChild(div);
                 });
             } catch (e) { document.getElementById('status-badge').classList.remove('online'); }
@@ -384,6 +390,7 @@ DASHBOARD_HTML = """
             await fetch('/api/add', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({query: url}) });
             fetchStatus();
         }
+        async function regenerateSuggestion() { await fetch('/api/control/regenerate', { method: 'POST' }); fetchStatus(); }
         async function control(action) { await fetch(`/api/control/${action}`, { method: 'POST' }); fetchStatus(); }
         async function removeTrack(index) { await fetch(`/api/remove/${index}`, { method: 'POST' }); fetchStatus(); }
         async function savePlaylist() {
@@ -604,6 +611,7 @@ async def api_control(action):
     elif action=='skip': vc.stop()
     elif action=='shuffle': random.shuffle(state.queue)
     elif action=='autoplay': state.autoplay = not state.autoplay
+    elif action=='regenerate': await cog.regenerate_autoplay(guild.id)
     return jsonify({'status':'ok'})
 
 @app.route('/api/remove/<int:index>', methods=['POST'])
@@ -952,21 +960,41 @@ class MusicBot(commands.Cog):
                 if ch: await ch.send(f"✅ Loaded {count} more tracks in background.", silent=True)
         except: pass
 
-    async def ensure_autoplay(self, guild_id):
+    async def ensure_autoplay(self, guild_id, avoid_ids=None):
         """Logic for buffering the next suggested song."""
         state = self.get_state(guild_id)
+        if avoid_ids is None: avoid_ids = []
         
         # 1. If Autoplay is OFF, remove any suggested tracks
         if not state.autoplay:
             state.queue = [t for t in state.queue if not t.get('suggested')]
             return
 
-        # 2. If we already have a suggestion at the end, do nothing
-        if state.queue and state.queue[-1].get('suggested'):
+        # 2. If we already have a suggestion at the end, do nothing (unless forced via avoid_ids)
+        if not avoid_ids and state.queue and state.queue[-1].get('suggested'):
             return
 
         # 3. Find a seed track (last in queue, or current)
-        seed = state.queue[-1] if state.queue else state.current_track
+        # If queue has items and last one is NOT suggested (or we are avoiding it), use it.
+        # Actually, if we are regenerating, the 'avoid_ids' likely contains the ID of the removed suggestion.
+        # So the seed should probably be the *previous* track.
+        
+        # Seed Logic:
+        # If queue has user tracks, use the last user track.
+        # If queue is empty, use current track.
+        # If both empty, use history.
+        
+        seed = None
+        # content_queue = [t for t in state.queue if not t.get('suggested')]
+        # if content_queue: seed = content_queue[-1]
+        
+        # Simplified: Use the last non-suggested track in queue, or current
+        for t in reversed(state.queue):
+            if not t.get('suggested'): 
+                seed = t
+                break
+        
+        if not seed: seed = state.current_track
         if not seed and state.history: seed = state.history[-1]
         
         if not seed: return
@@ -976,14 +1004,45 @@ class MusicBot(commands.Cog):
             # Run in executor to avoid blocking
             info = await self.bot.loop.run_in_executor(None, lambda: yt_dlp.YoutubeDL(YDL_MIX_OPTS).extract_info(f"https://www.youtube.com/watch?v={seed['id']}&list=RD{seed['id']}", download=False))
             if 'entries' in info:
+                # History check (last 20)
+                recent_ids = [h['id'] for h in state.history[-20:]]
+                
+                # Filter candidates
+                candidates = []
                 for e in info['entries']:
-                    # Don't add if it's the seed itself (basic dupe check)
-                    if e['id'] != seed['id']: 
-                        track = {'id':e['id'], 'title':e['title'], 'author':e['uploader'], 'duration':format_time(e['duration']), 'duration_seconds':e['duration'], 'webpage':e['url'], 'suggested': True}
-                        state.queue.append(track)
-                        break
+                    if not e: continue
+                    eid = e['id']
+                    if eid == seed['id']: continue
+                    if eid in avoid_ids: continue
+                    if eid in recent_ids: continue
+                    
+                    candidates.append(e)
+                    if len(candidates) >= 5: break # Get top 5 valid candidates
+                
+                if candidates:
+                    # Pick random from top 5 for variety
+                    e = random.choice(candidates)
+                    track = {'id':e['id'], 'title':e['title'], 'author':e['uploader'], 'duration':format_time(e['duration']), 'duration_seconds':e['duration'], 'webpage':e['url'], 'suggested': True}
+                    state.queue.append(track)
+                    
         except Exception as e:
             log_error(f"Autoplay fetch failed: {e}")
+
+    async def regenerate_autoplay(self, guild_id):
+        """Regenerates the current autoplay suggestion."""
+        state = self.get_state(guild_id)
+        if not state.autoplay: return False
+        
+        # Find current suggestion
+        if state.queue and state.queue[-1].get('suggested'):
+            old_suggestion = state.queue.pop() # Remove it
+            # Avoid this one, and also ensure we don't pick it again immediately
+            await self.ensure_autoplay(guild_id, avoid_ids=[old_suggestion['id']])
+            return True
+        else:
+            # No suggestion present, just ensure one
+            await self.ensure_autoplay(guild_id)
+            return True
 
     async def prepare_song(self, ctx, query):
         """Main entry point for adding a song to the queue."""
@@ -1276,6 +1335,18 @@ class MusicBot(commands.Cog):
         state.autoplay = not state.autoplay
         await self.ensure_autoplay(ctx.guild.id)
         await ctx.send(embed=discord.Embed(description=f"📻 Auto-Play: **{'ON' if state.autoplay else 'OFF'}**", color=COLOR_MAIN), silent=True)
+
+    @commands.hybrid_command(name="new", aliases=["regen", "mix"], description="Regenerate the autoplay suggestion")
+    async def new_suggestion(self, ctx):
+        state = self.get_state(ctx.guild.id)
+        if not state.autoplay:
+            return await ctx.send(embed=discord.Embed(description="❌ Auto-Play is OFF.", color=discord.Color.red()), silent=True)
+        
+        await ctx.defer()
+        if await self.regenerate_autoplay(ctx.guild.id):
+            await ctx.send(embed=discord.Embed(description="🎲 **Regenerated suggestion!**", color=COLOR_MAIN), silent=True)
+        else:
+            await ctx.send(embed=discord.Embed(description="❌ Could not regenerate.", color=discord.Color.red()), silent=True)
 
 # ==========================================
 # 7. STARTUP
