@@ -421,7 +421,7 @@ DASHBOARD_HTML = """
     </script>
 </body>
 </html>
-"
+"""
 
 # --- Auth Helpers ---
 def get_first_available_guild():
@@ -446,13 +446,14 @@ def check_auth():
     user_token = request.cookies.get('pi_music_auth')
     server_token = get_bot_token()
     if not server_token or user_token != server_token:
-        return render_template_string("""
+        html = """
             <body style="background:#0f0f0f; color:#eee; font-family:sans-serif; display:flex; flex-direction:column; align-items:center; justify-content:center; height:100vh; margin:0;">
-                <h1 style="color:#ff4444; font-size:4rem; margin:0;">⛔</h1>
+                <h1 style="color:#ff4444; font-size:4rem; margin:0;">NO ACCESS</h1>
                 <h2 style="margin-top:10px;">Access Denied</h2>
                 <p style="color:#888;">Use <code>/link</code> in Discord to generate a secure key.</p>
             </body>
-        """), 403
+        """
+        return render_template_string(html), 403
 
 @app.route('/auth')
 async def auth_route():
