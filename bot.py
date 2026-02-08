@@ -317,11 +317,24 @@ DASHBOARD_HTML = """
         .dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; box-shadow: 0 0 10px currentColor; }
 
         .container {
-            max-width: 600px;
+            max-width: 1200px;
             width: 100%;
             margin: 0 auto;
             padding: 20px;
             flex: 1;
+            display: grid;
+            grid-template-columns: 400px 1fr;
+            gap: 30px;
+            align-items: start;
+        }
+
+        .left-col {
+            position: sticky;
+            top: 100px;
+        }
+
+        .right-col {
+            min-width: 0; /* Fix grid overflow */
         }
 
         /* Player Card */
@@ -334,32 +347,35 @@ DASHBOARD_HTML = """
             box-shadow: var(--shadow);
             position: relative;
             overflow: hidden;
-            margin-bottom: 30px;
+            margin-bottom: 25px;
         }
 
         .album-art-container {
             position: relative;
-            width: 180px;
-            height: 180px;
+            width: 100%;
+            padding-bottom: 100%; /* Square aspect ratio */
             margin: 0 auto 25px;
+            border-radius: 20px;
+            overflow: hidden;
         }
 
         .album-art {
+            position: absolute;
+            top: 0; left: 0;
             width: 100%;
             height: 100%;
-            border-radius: 20px;
             object-fit: cover;
-            box-shadow: 0 20px 40px rgba(0,0,0,0.6);
             transition: transform 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
         }
         
-        .player-card:hover .album-art { transform: scale(1.02); }
+        .player-card:hover .album-art { transform: scale(1.05); }
 
         .track-info { margin-bottom: 30px; }
         .track-title { 
-            font-size: 1.4rem; 
+            font-size: 1.6rem; 
             font-weight: 700; 
             margin-bottom: 8px; 
+            line-height: 1.2;
             white-space: nowrap; 
             overflow: hidden; 
             text-overflow: ellipsis; 
@@ -367,11 +383,11 @@ DASHBOARD_HTML = """
         }
         .track-meta { 
             color: var(--text-muted); 
-            font-size: 0.95rem; 
+            font-size: 1rem; 
             font-weight: 500; 
             background: rgba(255,255,255,0.03);
             display: inline-block;
-            padding: 4px 12px;
+            padding: 6px 16px;
             border-radius: 12px;
         }
 
@@ -380,22 +396,22 @@ DASHBOARD_HTML = """
             display: flex;
             justify-content: center;
             align-items: center;
-            gap: 25px;
+            gap: 20px;
         }
 
         .btn-ctrl {
             background: rgba(255,255,255,0.05);
             border: none;
             color: var(--text-main);
-            width: 50px;
-            height: 50px;
+            width: 55px;
+            height: 55px;
             border-radius: 50%;
             cursor: pointer;
             transition: all 0.2s ease;
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 1.2rem;
+            font-size: 1.4rem;
         }
 
         .btn-ctrl:hover { background: rgba(255,255,255,0.1); transform: translateY(-2px); }
@@ -404,9 +420,9 @@ DASHBOARD_HTML = """
         .btn-play {
             background: var(--primary);
             color: #000;
-            width: 70px;
-            height: 70px;
-            font-size: 1.8rem;
+            width: 75px;
+            height: 75px;
+            font-size: 2rem;
             box-shadow: 0 10px 30px rgba(255, 215, 0, 0.3);
         }
         .btn-play:hover { background: #ffe033; box-shadow: 0 15px 35px rgba(255, 215, 0, 0.4); }
@@ -468,6 +484,10 @@ DASHBOARD_HTML = """
             padding: 5px;
             border-radius: 16px;
             margin-bottom: 20px;
+            position: sticky;
+            top: 90px;
+            z-index: 90;
+            backdrop-filter: blur(10px);
         }
 
         .tab-btn {
@@ -475,7 +495,8 @@ DASHBOARD_HTML = """
             border: none;
             background: transparent;
             color: var(--text-muted);
-            padding: 12px;
+            padding: 14px;
+            font-size: 1rem;
             font-weight: 600;
             border-radius: 12px;
             cursor: pointer;
@@ -519,49 +540,52 @@ DASHBOARD_HTML = """
         }
 
         .list-thumb, .res-img {
-            width: 45px;
-            height: 45px;
-            border-radius: 10px;
+            width: 50px;
+            height: 50px;
+            border-radius: 12px;
             object-fit: cover;
             margin-right: 15px;
             background: #222;
+            flex-shrink: 0;
         }
 
         .item-info { flex: 1; overflow: hidden; margin-right: 15px; display: flex; align-items: center; }
         .item-text { overflow: hidden; }
-        .item-title { font-weight: 600; font-size: 0.95rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 4px; }
-        .item-sub { font-size: 0.8rem; color: var(--text-muted); }
+        .item-title { font-weight: 600; font-size: 1rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 4px; }
+        .item-sub { font-size: 0.85rem; color: var(--text-muted); }
 
         .tag-auto {
-            font-size: 0.65rem;
+            font-size: 0.7rem;
             background: var(--primary);
             color: #000;
-            padding: 2px 6px;
-            border-radius: 4px;
+            padding: 2px 8px;
+            border-radius: 6px;
             font-weight: 700;
             margin-left: 8px;
             text-transform: uppercase;
         }
 
         .btn-del {
-            width: 35px;
-            height: 35px;
-            border-radius: 10px;
+            width: 40px;
+            height: 40px;
+            border-radius: 12px;
             background: rgba(255, 77, 77, 0.1);
             color: var(--danger);
             border: none;
             cursor: pointer;
             display: flex; align-items: center; justify-content: center;
             transition: 0.2s;
+            font-size: 1.1rem;
         }
         .btn-del:hover { background: var(--danger); color: white; }
 
         .btn-action {
             background: rgba(255,255,255,0.05);
             color: var(--text-main);
-            width: 35px; height: 35px; border-radius: 10px; border:none; cursor:pointer;
+            width: 40px; height: 40px; border-radius: 12px; border:none; cursor:pointer;
             display: flex; align-items: center; justify-content: center;
             margin-right: 8px; transition: 0.2s;
+            font-size: 1.1rem;
         }
         .btn-action:hover { background: var(--primary); color:black; }
 
@@ -584,6 +608,16 @@ DASHBOARD_HTML = """
         .btn-save { width: 100%; padding: 12px; background: #333; color: white; border: none; border-radius: 12px; font-weight: 600; cursor: pointer; transition:0.2s; }
         .btn-save:hover { background: var(--primary); color:black; }
 
+        /* Mobile Optimization */
+        @media (max-width: 900px) {
+            .container { grid-template-columns: 1fr; padding: 15px; gap: 20px; }
+            .left-col { position: static; }
+            .player-card { padding: 25px; }
+            .album-art-container { width: 250px; padding-bottom: 250px; }
+            .track-title { font-size: 1.4rem; }
+            .tabs { top: 85px; }
+        }
+
     </style>
 </head>
 <body>
@@ -593,47 +627,53 @@ DASHBOARD_HTML = """
     </div>
 
     <div class="container">
-        <div class="player-card">
-            <div class="album-art-container">
-                <img src="https://via.placeholder.com/300" id="np-img" class="album-art" onerror="this.src='https://via.placeholder.com/300?text=Music'">
-            </div>
-            <div class="track-info">
-                <div class="track-title" id="np-title">Nothing Playing</div>
-                <div class="track-meta" id="np-meta">--:--</div>
-            </div>
-            <div class="controls">
-                <button class="btn-ctrl btn-auto" id="btn-auto" onclick="control('autoplay')" title="Autoplay">♾️</button>
-                <button class="btn-ctrl" onclick="control('shuffle')" title="Shuffle">🔀</button>
-                <button class="btn-ctrl btn-play" onclick="control('pause')">⏯</button>
-                <button class="btn-ctrl" onclick="control('skip')" title="Skip">⏭</button>
-            </div>
-        </div>
-
-        <div class="search-wrap">
-            <input type="text" class="search-input" id="urlInput" placeholder="Paste YouTube URL or search..." onkeypress="handleEnter(event)">
-            <button class="search-btn" onclick="searchSong()">🔍</button>
-        </div>
-        <div id="loading" class="spinner"></div>
-        <div id="search-results"></div>
-
-        <div class="tabs">
-            <button class="tab-btn active" onclick="switchTab('queue')">Queue <span id="q-count">(0)</span></button>
-            <button class="tab-btn" onclick="switchTab('playlists')">Playlists</button>
-        </div>
-
-        <div id="tab-queue" class="section active">
-            <div id="queue-list"></div>
-        </div>
-
-        <div id="tab-playlists" class="section">
-            <div class="pl-tools">
-                <div class="pl-inputs">
-                    <input type="text" class="pl-input" id="plName" placeholder="New Playlist Name">
-                    <input type="text" class="pl-input" id="plUrl" placeholder="YouTube URL (Optional)">
+        <!-- Left Column -->
+        <div class="left-col">
+            <div class="player-card">
+                <div class="album-art-container">
+                    <img src="https://via.placeholder.com/300" id="np-img" class="album-art" onerror="this.src='https://via.placeholder.com/300?text=Music'">
                 </div>
-                <button class="btn-save" onclick="savePlaylist()">💾 Save Playlist</button>
+                <div class="track-info">
+                    <div class="track-title" id="np-title">Nothing Playing</div>
+                    <div class="track-meta" id="np-meta">--:--</div>
+                </div>
+                <div class="controls">
+                    <button class="btn-ctrl btn-auto" id="btn-auto" onclick="control('autoplay')" title="Autoplay">♾️</button>
+                    <button class="btn-ctrl" onclick="control('shuffle')" title="Shuffle">🔀</button>
+                    <button class="btn-ctrl btn-play" onclick="control('pause')">⏯</button>
+                    <button class="btn-ctrl" onclick="control('skip')" title="Skip">⏭</button>
+                </div>
             </div>
-            <div id="playlist-list"></div>
+
+            <div class="search-wrap">
+                <input type="text" class="search-input" id="urlInput" placeholder="Paste YouTube URL or search..." onkeypress="handleEnter(event)">
+                <button class="search-btn" onclick="searchSong()">🔍</button>
+            </div>
+            <div id="loading" class="spinner"></div>
+            <div id="search-results"></div>
+        </div>
+
+        <!-- Right Column -->
+        <div class="right-col">
+            <div class="tabs">
+                <button class="tab-btn active" onclick="switchTab('queue')">Queue <span id="q-count">(0)</span></button>
+                <button class="tab-btn" onclick="switchTab('playlists')">Playlists</button>
+            </div>
+
+            <div id="tab-queue" class="section active">
+                <div id="queue-list"></div>
+            </div>
+
+            <div id="tab-playlists" class="section">
+                <div class="pl-tools">
+                    <div class="pl-inputs">
+                        <input type="text" class="pl-input" id="plName" placeholder="New Playlist Name">
+                        <input type="text" class="pl-input" id="plUrl" placeholder="YouTube URL (Optional)">
+                    </div>
+                    <button class="btn-save" onclick="savePlaylist()">💾 Save Playlist</button>
+                </div>
+                <div id="playlist-list"></div>
+            </div>
         </div>
     </div>
 
