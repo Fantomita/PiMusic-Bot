@@ -46,6 +46,21 @@ def get_bot_token():
         return cog.web_auth_token
     return None
 
+def get_target_guild():
+    """Returns the target guild based on cookie or fallback."""
+    cog = get_bot_cog()
+    if not cog or not cog.bot: return None
+    
+    # Try cookie
+    g_id = request.cookies.get('pi_music_guild_id')
+    if g_id:
+        try:
+            guild = cog.bot.get_guild(int(g_id))
+            if guild: return guild
+        except: pass
+        
+    return get_first_available_guild()
+
 def set_bot_instance(bot):
     global bot_instance
     bot_instance = bot
@@ -73,12 +88,15 @@ def check_auth():
 @app.route('/auth')
 async def auth_route():
     token_from_url = request.args.get('token')
+    guild_id = request.args.get('guild')
     server_token = get_bot_token()
     
     if token_from_url == server_token:
         resp = await make_response(redirect('/'))
         # Using Lax SameSite policy to allow cookie to set during redirect
         resp.set_cookie('pi_music_auth', token_from_url, max_age=86400, samesite='Lax')
+        if guild_id:
+            resp.set_cookie('pi_music_guild_id', guild_id, max_age=86400, samesite='Lax')
         return resp
     
     log_error(f"Auth Failed. URL Token: {token_from_url}, Server Token: {server_token}")
@@ -102,7 +120,7 @@ async def home():
 
 @app.route('/api/status')
 async def api_status():
-    guild = get_first_available_guild()
+    guild = get_target_guild()
     cog = get_bot_cog()
     
     # Debug info
@@ -163,7 +181,7 @@ async def api_save_playlist():
         return jsonify({'status': 'ok'})
     
     # Save current queue
-    guild = get_first_available_guild()
+    guild = get_target_guild()
     cog = get_bot_cog()
     if not guild or not cog:
         return jsonify({'error': 'No guild'}), 400
@@ -199,7 +217,7 @@ async def api_load_playlist():
     if name not in saved_playlists:
         return jsonify({'error': 'Not found'}), 404
         
-    guild = get_first_available_guild()
+    guild = get_target_guild()
     cog = get_bot_cog()
     if not guild or not cog:
         return jsonify({'error': 'No guild'}), 400
@@ -287,7 +305,7 @@ async def api_search():
 
 @app.route('/api/control/<action>', methods=['POST'])
 async def api_control(action):
-    guild = get_first_available_guild()
+    guild = get_target_guild()
     cog = get_bot_cog()
     if not guild or not cog:
         return jsonify({'error': 'No guild'}), 400
@@ -325,7 +343,7 @@ async def api_control(action):
 
 @app.route('/api/remove/<int:index>', methods=['POST'])
 async def api_remove(index):
-    guild = get_first_available_guild()
+    guild = get_target_guild()
     cog = get_bot_cog()
     if not guild or not cog:
         return jsonify({'error': 'No guild'}), 400
@@ -340,7 +358,7 @@ async def api_remove(index):
 @app.route('/api/add', methods=['POST'])
 async def api_add():
     data = await request.get_json()
-    guild = get_first_available_guild()
+    guild = get_target_guild()
     cog = get_bot_cog()
     if not guild or not cog:
         return jsonify({'error': 'No guild'}), 400

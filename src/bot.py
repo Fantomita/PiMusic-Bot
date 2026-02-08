@@ -700,7 +700,7 @@ class MusicBot(commands.Cog):
              self.public_url = await self.start_cloudflared()
         
         if self.public_url:
-            secure_link = f"{self.public_url}/auth?token={self.web_auth_token}"
+            secure_link = f"{self.public_url}/auth?token={self.web_auth_token}&guild={ctx.guild.id}"
             embed = discord.Embed(title="🎛️ Web Dashboard", description="Click below to open the control panel.", color=COLOR_MAIN)
             embed.set_footer(text="Powered by Cloudflare Tunnel ☁️")
             view = ui.View()
