@@ -7,9 +7,11 @@ A feature-rich Discord Music Bot featuring a built-in Web Dashboard, local cachi
 ## 🚀 Features
 
 - **High-Quality Audio:** Powered by `yt-dlp` and `ffmpeg` for smooth playback.
-- **Web Dashboard:** Control playback, search songs, and manage the queue from any browser.
+- **Responsive Web Dashboard:** Control playback, search songs, and manage the queue from any browser.
+  - *Responsive Design:* Optimized interface for both Desktop ("Command Center" view) and Mobile devices.
   - *Tunneling:* Automatically uses **Cloudflare Tunnel** to expose the dashboard securely (No port forwarding needed!).
 - **Local Caching:** Automatically saves played tracks to disk (`./music_cache`) to save bandwidth and prevent re-downloading.
+  - *Non-Blocking I/O:* Cache cleanup and file operations run in background threads to prevent audio stutters on slow storage (SD Cards).
 - **Smart Playlists:** Save your current queue as a playlist or load existing YouTube playlists.
 - **Auto-Play:** Keeps the music going with related track suggestions when the queue ends.
 - **System Stats:** Monitor CPU, RAM, and Temperature (optimized for Raspberry Pi).
@@ -39,6 +41,14 @@ It is recommended to use a virtual environment:
 python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
+```
+
+### ⚡ Performance Boost (Linux/Raspberry Pi)
+
+For the best performance on Raspberry Pi Zero 2W or other Linux devices, install `uvloop`. The bot detects it automatically and uses it to replace the standard Python event loop, significantly increasing speed.
+
+```bash
+pip install uvloop
 ```
 
 ### 4. Configuration
