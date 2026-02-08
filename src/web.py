@@ -127,6 +127,7 @@ async def api_status():
     for t in state.queue:
         queue_data.append({
             'title': t['title'],
+            'author': t.get('author', 'Unknown'),
             'id': t['id'],
             'thumbnail': get_thumbnail_url(t['id']),
             'suggested': t.get('suggested', False)

@@ -165,7 +165,7 @@ class ListPaginator(ui.View):
             for i, s in enumerate(self.data_list[start:end]):
                 if isinstance(s, dict): 
                     prefix = "✨ " if s.get('suggested') else ""
-                    line = f"`{start+i+1}.` {prefix}**{s['title']}** ({s.get('duration', '?:??')})"
+                    line = f"`{start+i+1}.` {prefix}**{s['title']}** by {s.get('author', 'Unknown')} ({s.get('duration', '?:??')})"
                 else: line = f"`{start+i+1}.` {s}"
                 desc_lines.append(line)
             desc = "\n".join(desc_lines)
@@ -463,8 +463,8 @@ class MusicBot(commands.Cog):
                 
                 guild = self.bot.get_guild(guild_id)
                 ch = self.get_notification_channel(guild)
-                if ch:
-                    await ch.send(f"✅ Loaded {count} more tracks in background.", silent=True)
+                # if ch:
+                #    await ch.send(f"✅ Loaded {count} more tracks in background.", silent=True)
         except Exception:
             pass
 
