@@ -1,0 +1,670 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>{{ bot_name }} Dashboard</title>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary: #FFD700;
+            --primary-dim: rgba(255, 215, 0, 0.2);
+            --bg-dark: #0a0a0a;
+            --bg-card: #141414;
+            --bg-card-hover: #1f1f1f;
+            --text-main: #ffffff;
+            --text-muted: #888888;
+            --border: #2a2a2a;
+            --danger: #ff4d4d;
+            --radius: 20px;
+            --shadow: 0 10px 40px -10px rgba(0,0,0,0.5);
+        }
+
+        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+        
+        html, body {
+            font-family: 'Outfit', sans-serif;
+            background-color: var(--bg-dark);
+            color: var(--text-main);
+            margin: 0;
+            padding: 0;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow-x: hidden; /* Fix horizontal scroll */
+        }
+
+        /* Ambient Background */
+        body::before {
+            content: '';
+            position: fixed;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: radial-gradient(circle at center, rgba(255, 215, 0, 0.03) 0%, transparent 60%);
+            z-index: -1;
+            pointer-events: none;
+        }
+
+        .header {
+            padding: 20px 25px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            backdrop-filter: blur(10px);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            border-bottom: 1px solid rgba(255,255,255,0.05);
+        }
+
+        .logo {
+            font-size: 1.5rem;
+            font-weight: 800;
+            background: linear-gradient(135deg, #fff 0%, var(--primary) 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            letter-spacing: -0.5px;
+        }
+
+        .status-badge {
+            font-size: 0.75rem;
+            font-weight: 600;
+            padding: 6px 12px;
+            border-radius: 30px;
+            background: rgba(255,255,255,0.05);
+            color: var(--text-muted);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            border: 1px solid transparent;
+            transition: 0.3s;
+        }
+
+        .status-badge.online {
+            background: rgba(46, 204, 113, 0.1);
+            color: #2ecc71;
+            border-color: rgba(46, 204, 113, 0.2);
+        }
+
+        .dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; box-shadow: 0 0 10px currentColor; }
+
+        .container {
+            max-width: 1200px;
+            width: 100%;
+            margin: 0 auto;
+            padding: 20px;
+            flex: 1;
+            display: grid;
+            grid-template-columns: 400px 1fr;
+            gap: 30px;
+            align-items: start;
+        }
+
+        .left-col {
+            position: sticky;
+            top: 100px;
+        }
+
+        .right-col {
+            min-width: 0; /* Fix grid overflow */
+        }
+
+        /* Player Card */
+        .player-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 30px;
+            text-align: center;
+            box-shadow: var(--shadow);
+            position: relative;
+            overflow: hidden;
+            margin-bottom: 25px;
+        }
+
+        .album-art-container {
+            position: relative;
+            width: 100%;
+            padding-bottom: 100%; /* Square aspect ratio */
+            margin: 0 auto 25px;
+            border-radius: 20px;
+            overflow: hidden;
+        }
+
+        .album-art {
+            position: absolute;
+            top: 0; left: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            transition: transform 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+        
+        .player-card:hover .album-art { transform: scale(1.05); }
+
+        .track-info { margin-bottom: 30px; }
+        .track-title { 
+            font-size: 1.6rem; 
+            font-weight: 700; 
+            margin-bottom: 8px; 
+            line-height: 1.2;
+            white-space: nowrap; 
+            overflow: hidden; 
+            text-overflow: ellipsis; 
+            letter-spacing: -0.02em;
+        }
+        .track-meta { 
+            color: var(--text-muted); 
+            font-size: 1rem; 
+            font-weight: 500; 
+            background: rgba(255,255,255,0.03);
+            display: inline-block;
+            padding: 6px 16px;
+            border-radius: 12px;
+        }
+
+        /* Controls */
+        .controls {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 20px;
+        }
+
+        .btn-ctrl {
+            background: rgba(255,255,255,0.05);
+            border: none;
+            color: var(--text-main);
+            width: 55px;
+            height: 55px;
+            border-radius: 50%;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.4rem;
+        }
+
+        .btn-ctrl:hover { background: rgba(255,255,255,0.1); transform: translateY(-2px); }
+        .btn-ctrl:active { transform: scale(0.95); }
+
+        .btn-play {
+            background: var(--primary);
+            color: #000;
+            width: 75px;
+            height: 75px;
+            font-size: 2rem;
+            box-shadow: 0 10px 30px rgba(255, 215, 0, 0.3);
+        }
+        .btn-play:hover { background: #ffe033; box-shadow: 0 15px 35px rgba(255, 215, 0, 0.4); }
+
+        .btn-auto.active { 
+            background: var(--primary-dim);
+            color: var(--primary);
+            border: 1px solid var(--primary);
+        }
+
+        /* Search */
+        .search-wrap { 
+            position: relative; 
+            margin-bottom: 25px; 
+            z-index: 10;
+        }
+        
+        .search-input {
+            width: 100%;
+            padding: 18px 60px 18px 25px;
+            border-radius: 18px;
+            border: 1px solid var(--border);
+            background: var(--bg-card);
+            color: white;
+            font-size: 1rem;
+            font-family: inherit;
+            transition: 0.3s;
+            box-shadow: inset 0 2px 10px rgba(0,0,0,0.2);
+        }
+
+        .search-input:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px var(--primary-dim);
+            background: #1a1a1a;
+        }
+
+        .search-btn {
+            position: absolute;
+            right: 10px;
+            top: 10px;
+            bottom: 10px;
+            width: 45px;
+            background: var(--primary);
+            border: none;
+            border-radius: 12px;
+            cursor: pointer;
+            color: #000;
+            font-size: 1.1rem;
+            transition: 0.2s;
+            display:flex; align-items:center; justify-content:center;
+        }
+        .search-btn:hover { transform: scale(1.05); }
+
+        /* Tabs */
+        .tabs {
+            display: flex;
+            background: rgba(255,255,255,0.03);
+            padding: 5px;
+            border-radius: 16px;
+            margin-bottom: 20px;
+            position: sticky;
+            top: 90px;
+            z-index: 90;
+            backdrop-filter: blur(10px);
+        }
+
+        .tab-btn {
+            flex: 1;
+            border: none;
+            background: transparent;
+            color: var(--text-muted);
+            padding: 14px;
+            font-size: 1rem;
+            font-weight: 600;
+            border-radius: 12px;
+            cursor: pointer;
+            transition: 0.3s;
+            font-family: inherit;
+        }
+
+        .tab-btn.active {
+            background: var(--bg-card);
+            color: var(--text-main);
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+        }
+
+        /* Lists */
+        .section { display: none; animation: slideUp 0.4s ease; }
+        .section.active { display: block; }
+
+        @keyframes slideUp {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .list-item, .res-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 15px;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            margin-bottom: 10px;
+            transition: 0.2s;
+        }
+        
+        .res-item { cursor: pointer; }
+
+        .list-item:hover, .res-item:hover {
+            transform: translateY(-2px);
+            border-color: #444;
+            background: var(--bg-card-hover);
+        }
+
+        .list-thumb, .res-img {
+            width: 50px;
+            height: 50px;
+            border-radius: 12px;
+            object-fit: cover;
+            margin-right: 15px;
+            background: #222;
+            flex-shrink: 0;
+        }
+
+        .item-info { flex: 1; overflow: hidden; margin-right: 15px; display: flex; align-items: center; }
+        .item-text { overflow: hidden; }
+        .item-title { font-weight: 600; font-size: 1rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 4px; }
+        .item-sub { font-size: 0.85rem; color: var(--text-muted); }
+
+        .tag-auto {
+            font-size: 0.7rem;
+            background: var(--primary);
+            color: #000;
+            padding: 2px 8px;
+            border-radius: 6px;
+            font-weight: 700;
+            margin-left: 8px;
+            text-transform: uppercase;
+        }
+
+        .btn-del {
+            width: 40px;
+            height: 40px;
+            border-radius: 12px;
+            background: rgba(255, 77, 77, 0.1);
+            color: var(--danger);
+            border: none;
+            cursor: pointer;
+            display: flex; align-items: center; justify-content: center;
+            transition: 0.2s;
+            font-size: 1.1rem;
+        }
+        .btn-del:hover { background: var(--danger); color: white; }
+
+        .btn-action {
+            background: rgba(255,255,255,0.05);
+            color: var(--text-main);
+            width: 40px; height: 40px; border-radius: 12px; border:none; cursor:pointer;
+            display: flex; align-items: center; justify-content: center;
+            margin-right: 8px; transition: 0.2s;
+            font-size: 1.1rem;
+        }
+        .btn-action:hover { background: var(--primary); color:black; }
+
+        /* Loader */
+        .spinner {
+            width: 30px; height: 30px;
+            border: 3px solid rgba(255,255,255,0.1);
+            border-top-color: var(--primary);
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            margin: 30px auto;
+            display: none;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* Playlist Tools */
+        .pl-tools { background: var(--bg-card); padding: 20px; border-radius: 20px; margin-bottom: 20px; border: 1px solid var(--border); }
+        .pl-inputs { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 15px; }
+        .pl-input { background: #0a0a0a; border: 1px solid #333; color: white; padding: 12px; border-radius: 12px; font-family: inherit; width: 100%; box-sizing: border-box; }
+        .btn-save { width: 100%; padding: 12px; background: #333; color: white; border: none; border-radius: 12px; font-weight: 600; cursor: pointer; transition:0.2s; }
+        .btn-save:hover { background: var(--primary); color:black; }
+
+        /* Mobile Optimization */
+        @media (max-width: 900px) {
+            .container { grid-template-columns: 1fr; padding: 15px; gap: 20px; }
+            .left-col { position: static; }
+            .player-card { padding: 25px; }
+            .album-art-container { width: 250px; padding-bottom: 250px; }
+            .track-title { font-size: 1.4rem; }
+            .tabs { top: 85px; }
+            .pl-inputs { grid-template-columns: 1fr; } /* Stack inputs on mobile */
+        }
+
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="logo">🎵 {{ bot_name }}</div>
+        <div id="status-badge" class="status-badge"><div class="dot"></div> <span id="status-text">Disconnected</span></div>
+    </div>
+
+    <div class="container">
+        <!-- Left Column -->
+        <div class="left-col">
+            <div class="player-card">
+                <div class="album-art-container">
+                    <img src="https://via.placeholder.com/300" id="np-img" class="album-art" onerror="this.src='https://via.placeholder.com/300?text=Music'">
+                </div>
+                <div class="track-info">
+                    <div class="track-title" id="np-title">Nothing Playing</div>
+                    <div class="track-meta" id="np-meta">--:--</div>
+                </div>
+                <div class="controls">
+                    <button class="btn-ctrl btn-auto" id="btn-auto" onclick="control('autoplay')" title="Autoplay">♾️</button>
+                    <button class="btn-ctrl" onclick="control('shuffle')" title="Shuffle">🔀</button>
+                    <button class="btn-ctrl btn-play" onclick="control('pause')">⏯</button>
+                    <button class="btn-ctrl" onclick="control('skip')" title="Skip">⏭</button>
+                </div>
+            </div>
+
+            <div class="search-wrap">
+                <input type="text" class="search-input" id="urlInput" placeholder="Paste YouTube URL or search..." onkeypress="handleEnter(event)">
+                <button class="search-btn" onclick="searchSong()">🔍</button>
+            </div>
+            <div id="loading" class="spinner"></div>
+            <div id="search-results"></div>
+        </div>
+
+        <!-- Right Column -->
+        <div class="right-col">
+            <div class="tabs">
+                <button class="tab-btn active" onclick="switchTab('queue')">Queue <span id="q-count">(0)</span></button>
+                <button class="tab-btn" onclick="switchTab('playlists')">Playlists</button>
+            </div>
+
+            <div id="tab-queue" class="section active">
+                <div id="queue-list"></div>
+            </div>
+
+            <div id="tab-playlists" class="section">
+                <div class="pl-tools">
+                    <div class="pl-inputs">
+                        <input type="text" class="pl-input" id="plName" placeholder="New Playlist Name">
+                        <input type="text" class="pl-input" id="plUrl" placeholder="YouTube URL (Optional)">
+                    </div>
+                    <button class="btn-save" onclick="savePlaylist()">💾 Save Playlist</button>
+                </div>
+                <div id="playlist-list"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // State
+        let currentTab = 'queue';
+        let lastStatus = null;
+
+        function switchTab(tab) {
+            currentTab = tab;
+            document.querySelectorAll('.section').forEach(el => el.classList.remove('active'));
+            document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
+            document.getElementById('tab-' + tab).classList.add('active');
+            event.target.classList.add('active');
+        }
+
+        function handleEnter(e) { if(e.key === 'Enter') searchSong(); }
+
+        async function fetchStatus() {
+            try {
+                const res = await fetch('/api/status');
+                if (res.status === 403) { window.location.reload(); return; }
+                const data = await res.json();
+                
+                // Update Header
+                const badge = document.getElementById('status-badge');
+                if (data.guild) {
+                    badge.classList.add('online');
+                    document.getElementById('status-text').innerText = data.guild;
+                } else {
+                    badge.classList.remove('online');
+                    document.getElementById('status-text').innerText = "Offline";
+                }
+
+                // Update Player
+                document.getElementById('np-title').innerText = data.current ? data.current.title : "Nothing Playing";
+                document.getElementById('np-meta').innerText = data.current ? `${data.current.author} • ${data.current.duration}` : "Ready to play";
+                
+                const img = document.getElementById('np-img');
+                const newSrc = data.current && data.current.thumbnail ? data.current.thumbnail : 'https://via.placeholder.com/300?text=Music';
+                if(img.src !== newSrc && newSrc) img.src = newSrc;
+
+                const autoBtn = document.getElementById('btn-auto');
+                if (data.autoplay) autoBtn.classList.add('active'); else autoBtn.classList.remove('active');
+
+                // Update Queue
+                document.getElementById('q-count').innerText = `(${data.queue.length})`;
+                
+                // Only redraw queue if it changed to avoid flicker
+                const newQHash = JSON.stringify(data.queue);
+                if (lastStatus !== newQHash) {
+                    lastStatus = newQHash;
+                    const qList = document.getElementById('queue-list');
+                    qList.innerHTML = '';
+                    
+                    if(data.queue.length === 0) {
+                        qList.innerHTML = '<div style="text-align:center; color:var(--text-muted); padding:40px;">Queue is empty</div>';
+                    } else {
+                        data.queue.forEach((track, index) => {
+                            const div = document.createElement('div');
+                            div.className = 'list-item';
+                            if (track.suggested) div.style.opacity = '0.8';
+                            
+                            const thumb = track.thumbnail ? track.thumbnail : 'https://via.placeholder.com/40';
+                            const badge = track.suggested ? '<span class="tag-auto">Auto</span>' : '';
+                            
+                            let buttons = '';
+                            if (track.suggested) {
+                                buttons = `<button class="btn-action" onclick="regenerateSuggestion()" title="Regenerate">🎲</button>`;
+                            } else {
+                                buttons = `<button class="btn-del" onclick="removeTrack(${index})">✕</button>`;
+                            }
+                            
+                            div.innerHTML = `
+                                <div class="item-info">
+                                    <img src="${thumb}" class="list-thumb">
+                                    <div class="item-text">
+                                        <div class="item-title">${index + 1}. ${track.title}${badge}</div>
+                                        <div class="item-sub">Next Up</div>
+                                    </div>
+                                </div>
+                                <div style="display:flex;">${buttons}</div>
+                            `;
+                            qList.appendChild(div);
+                        });
+                    }
+                }
+
+            } catch (e) { document.getElementById('status-badge').classList.remove('online'); }
+        }
+
+        async function fetchPlaylists() {
+            try {
+                const res = await fetch('/api/playlists');
+                const data = await res.json();
+                const list = document.getElementById('playlist-list');
+                list.innerHTML = '';
+                if(data.length === 0) { list.innerHTML = '<div style="text-align:center; color:var(--text-muted);">No saved playlists</div>'; return; }
+                
+                data.forEach(pl => {
+                    const icon = pl.type === 'live' ? '🔗' : '💾';
+                    const sub = pl.type === 'live' ? 'YouTube Playlist' : `${pl.count} songs`;
+                    const div = document.createElement('div');
+                    div.className = 'list-item';
+                    div.innerHTML = `
+                        <div class="item-info">
+                            <div style="font-size:1.5rem; margin-right:15px; width:45px; text-align:center;">${icon}</div>
+                            <div class="item-text">
+                                <div class="item-title">${pl.name}</div>
+                                <div class="item-sub">${sub}</div>
+                            </div>
+                        </div>
+                        <div style="display:flex; gap:5px;">
+                            <button class="btn-action" onclick="loadPlaylist(this, '${pl.name}')">▶</button>
+                            <button class="btn-del" onclick="deletePlaylist('${pl.name}')">🗑</button>
+                        </div>
+                    `;
+                    list.appendChild(div);
+                });
+            } catch (e) {}
+        }
+
+        async function searchSong() {
+            const input = document.getElementById('urlInput');
+            const resDiv = document.getElementById('search-results');
+            const loader = document.getElementById('loading');
+            
+            if (!input.value.trim()) return;
+            
+            // Direct play logic for URLs
+            if (input.value.includes('http')) { 
+                addDirect(input.value); 
+                return; 
+            }
+
+            resDiv.style.display = 'none'; 
+            resDiv.innerHTML = ''; 
+            loader.style.display = 'block';
+
+            try {
+                const res = await fetch('/api/search', { 
+                    method: 'POST', 
+                    headers: {'Content-Type': 'application/json'}, 
+                    body: JSON.stringify({query: input.value}) 
+                });
+                const results = await res.json();
+                loader.style.display = 'none';
+                
+                if (results.error) { alert(results.error); return; }
+                
+                results.forEach(item => {
+                    const div = document.createElement('div');
+                    div.className = 'res-item';
+                    div.onclick = () => { 
+                        addDirect(item.url); 
+                        resDiv.style.display='none'; 
+                        document.getElementById('urlInput').value = ''; 
+                    };
+                    div.innerHTML = `
+                        <img src="${item.thumbnail}" class="res-img" onerror="this.src='https://via.placeholder.com/50'">
+                        <div class="item-info">
+                            <div class="item-text">
+                                <div class="item-title">${item.title}</div>
+                                <div class="item-sub">${item.author} • ${item.duration}</div>
+                            </div>
+                        </div>
+                        <div style="color:var(--primary); font-weight:bold; font-size:1.2rem;">+</div>
+                    `;
+                    resDiv.appendChild(div);
+                });
+                resDiv.style.display = 'block';
+            } catch (e) { 
+                loader.style.display = 'none'; 
+                alert("Search failed"); 
+            } 
+        }
+
+        async function addDirect(url) {
+            document.getElementById('urlInput').value = '';
+            // Show optimistic feedback if you wanted, but status update will handle it
+            await fetch('/api/add', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({query: url}) });
+            fetchStatus();
+        }
+
+        async function regenerateSuggestion() { await fetch('/api/control/regenerate', { method: 'POST' }); fetchStatus(); }
+        async function control(action) { await fetch(`/api/control/${action}`, { method: 'POST' }); fetchStatus(); }
+        async function removeTrack(index) { await fetch(`/api/remove/${index}`, { method: 'POST' }); fetchStatus(); }
+        
+        async function savePlaylist() {
+            const name = document.getElementById('plName').value;
+            const url = document.getElementById('plUrl').value;
+            if(!name) return alert("Name required");
+            const body = {name: name}; if(url) body.url = url;
+            await fetch('/api/playlists/save', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body) });
+            document.getElementById('plName').value = ""; document.getElementById('plUrl').value = "";
+            fetchPlaylists();
+        }
+
+        async function loadPlaylist(btn, name) {
+            if(!confirm(`Load "${name}"?`)) return;
+            const originalHTML = btn.innerHTML;
+            btn.innerHTML = '⏳';
+            await fetch('/api/playlists/load', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({name: name}) });
+            fetchStatus();
+            btn.innerHTML = originalHTML;
+        }
+
+        async function deletePlaylist(name) {
+            if(!confirm("Delete?")) return;
+            await fetch('/api/playlists/delete', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({name: name}) });
+            fetchPlaylists();
+        }
+
+        setInterval(fetchStatus, 2000);
+        fetchStatus();
+        fetchPlaylists();
+    </script>
+</body>
+</html>
