@@ -1182,7 +1182,10 @@ async def api_control(action):
     elif action == 'skip' and vc:
         vc.stop()
     elif action == 'shuffle':
-        random.shuffle(state.queue)
+        user_queue = [t for t in state.queue if not t.get('suggested')]
+        suggested = [t for t in state.queue if t.get('suggested')]
+        random.shuffle(user_queue)
+        state.queue[:] = user_queue + suggested
     elif action == 'autoplay':
         state.autoplay = not state.autoplay
         await cog.ensure_autoplay(guild.id)
@@ -1208,6 +1211,8 @@ async def api_remove(index):
     
     state = cog.get_state(guild.id)
     if 0 <= index < len(state.queue):
+        if state.queue[index].get('suggested') and state.autoplay:
+            return jsonify({'error': 'Cannot remove autoplay suggestion'}), 400
         del state.queue[index]
     return jsonify({'status': 'ok'})
 
@@ -1340,7 +1345,10 @@ class MusicControlView(ui.View):
     @ui.button(emoji="🔀", style=discord.ButtonStyle.secondary)
     async def shuffle(self, interaction, button):
         state = self.cog.get_state(self.guild_id)
-        random.shuffle(state.queue)
+        user_queue = [t for t in state.queue if not t.get('suggested')]
+        suggested = [t for t in state.queue if t.get('suggested')]
+        random.shuffle(user_queue)
+        state.queue[:] = user_queue + suggested
         await interaction.response.send_message("🔀 Shuffled queue!", ephemeral=True, silent=True)
     @ui.button(emoji="📋", style=discord.ButtonStyle.gray)
     async def q_btn(self, interaction, button):
@@ -1950,7 +1958,11 @@ class MusicBot(commands.Cog):
 
     @commands.hybrid_command(name="shuffle")
     async def shuffle(self, ctx):
-        random.shuffle(self.get_state(ctx.guild.id).queue)
+        state = self.get_state(ctx.guild.id)
+        user_queue = [t for t in state.queue if not t.get('suggested')]
+        suggested = [t for t in state.queue if t.get('suggested')]
+        random.shuffle(user_queue)
+        state.queue[:] = user_queue + suggested
         await ctx.send(embed=discord.Embed(description="🔀 Shuffled.", color=COLOR_MAIN), silent=True)
 
     @commands.hybrid_command(name="saveplaylist")
