@@ -1129,6 +1129,15 @@ async def api_control(action):
         random.shuffle(state.queue)
     elif action == 'autoplay':
         state.autoplay = not state.autoplay
+        await cog.ensure_autoplay(guild.id)
+        if state.autoplay and state.queue and vc and not vc.is_playing():
+             class DummyCtx:
+                 def __init__(self, g, v):
+                     self.guild = g
+                     self.voice_client = v
+                     self.author = "WebUser"
+                 async def send(self, *args, **kwargs): pass 
+             await cog.play_next(DummyCtx(guild, vc))
     elif action == 'regenerate':
         await cog.regenerate_autoplay(guild.id)
         
@@ -1924,6 +1933,10 @@ class MusicBot(commands.Cog):
         state = self.get_state(ctx.guild.id)
         state.autoplay = not state.autoplay
         await self.ensure_autoplay(ctx.guild.id)
+        
+        if state.autoplay and state.queue and ctx.guild.voice_client and not ctx.guild.voice_client.is_playing():
+             await self.play_next(ctx)
+
         await ctx.send(embed=discord.Embed(description=f"📻 Auto-Play: **{'ON' if state.autoplay else 'OFF'}**", color=COLOR_MAIN), silent=True)
 
     @commands.hybrid_command(name="new", aliases=["regen", "mix"], description="Regenerate the autoplay suggestion")
