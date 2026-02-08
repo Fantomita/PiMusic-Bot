@@ -167,8 +167,8 @@ def format_time(seconds):
         return f"{h}:{m:02}:{s:02}"
     return f"{m}:{s:02}"
 
-def enforce_cache_limit():
-    """Deletes old cached files if the directory exceeds the size limit."""
+def _enforce_cache_limit_sync():
+    """Deletes old cached files if the directory exceeds the size limit (Synchronous)."""
     max_bytes = MAX_CACHE_SIZE_GB * 1024 * 1024 * 1024
     files = []
     total_size = 0
@@ -207,6 +207,10 @@ def enforce_cache_limit():
                 log_error(f"Error cleaning cache file {entry.name}: {e}")
                 
         save_json(CACHE_MAP_FILE, cache_map)
+
+async def enforce_cache_limit(loop):
+    """Async wrapper for cache limit enforcement."""
+    await loop.run_in_executor(None, _enforce_cache_limit_sync)
 
 def get_thumbnail_url(vid_id):
     """Returns local thumbnail path if cached, else remote URL."""
@@ -1506,13 +1510,13 @@ class MusicBot(commands.Cog):
         if not to_download:
             return
         
-        enforce_cache_limit()
+        await enforce_cache_limit(self.bot.loop)
         for track in to_download:
-            enforce_cache_limit()
+            await enforce_cache_limit(self.bot.loop)
             try:
                 await self.bot.loop.run_in_executor(None, lambda: yt_dlp.YoutubeDL(YDL_DOWNLOAD_OPTS).download([f'https://www.youtube.com/watch?v={track["id"]}']))
                 cache_map[track['id']] = track['title']
-                save_json(CACHE_MAP_FILE, cache_map)
+                await self.bot.loop.run_in_executor(None, save_json, CACHE_MAP_FILE, cache_map)
             except Exception as e:
                 log_error(f"DL Fail: {e}")
             await asyncio.sleep(0.5)
@@ -2026,4 +2030,10 @@ async def main():
         log_info("👋 Bot Shutdown.")
 
 if __name__ == "__main__":
+    try:
+        import uvloop
+        uvloop.install()
+        log_info("🚀 UVLoop enabled.")
+    except ImportError:
+        pass
     asyncio.run(main())
