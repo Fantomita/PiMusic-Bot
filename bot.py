@@ -1410,6 +1410,9 @@ class MusicBot(commands.Cog):
         global bot_instance
         bot_instance = bot 
         self.web_task = self.bot.loop.create_task(app.run_task(host='0.0.0.0', port=5000))
+        
+        # Pre-start Cloudflared
+        self.bot.loop.create_task(self.start_cloudflared())
 
     async def cog_unload(self):
         self.cleanup_loop.stop()
@@ -1488,10 +1491,20 @@ class MusicBot(commands.Cog):
 
     async def start_cloudflared(self):
         """Starts the tunnel and retrieves the URL."""
+        # 1. If already running and active, return URL
         if self.public_url and self.tunnel_proc and self.tunnel_proc.returncode is None:
             return self.public_url
         
-        # Reset state
+        # 2. If process is running but no URL yet, wait for it (join existing startup)
+        if self.tunnel_proc and self.tunnel_proc.returncode is None:
+            log_info("⏳ Waiting for existing tunnel startup...")
+            start_time = time.time()
+            while time.time() - start_time < 20:
+                if self.public_url: return self.public_url
+                if self.tunnel_proc.returncode is not None: break # Process died
+                await asyncio.sleep(0.5)
+        
+        # 3. Start fresh
         self.public_url = None
         if self.drain_task: self.drain_task.cancel()
         
