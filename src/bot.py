@@ -24,8 +24,14 @@ import requests
 import yt_dlp
 from discord import app_commands, ui
 from discord.ext import commands, tasks
-from dotenv import load_dotenv
-from quart import Quart, jsonify, make_response, redirect, render_template_string, request, send_from_directory, render_template
+from quart import Quart, jsonify, make_response, redirect, render_template, request, send_from_directory
+
+from config import (
+    CACHE_DIR, CACHE_MAP_FILE, COLOR_MAIN, FFMPEG_LOCAL_OPTS, FFMPEG_STREAM_OPTS,
+    MAX_CACHE_SIZE_GB, PLAYLIST_FILE, SETTINGS_FILE, TOKEN, YDL_DOWNLOAD_OPTS,
+    YDL_FLAT_OPTS, YDL_MIX_OPTS, YDL_PLAY_OPTS, YDL_PLAYLIST_LOAD_OPTS,
+    YDL_SEARCH_OPTS, COMMON_YDL_ARGS
+)
 
 # ==========================================
 # 1. SETUP & CONFIGURATION
@@ -51,89 +57,12 @@ try:
 except Exception:
     pass
 
-# --- Environment Variables ---
-load_dotenv()
-TOKEN = os.getenv('DISCORD_TOKEN')
-
 if not TOKEN:
     log_error("❌ ERROR: DISCORD_TOKEN missing.")
     sys.exit(1)
 
-# --- File Paths ---
-CACHE_DIR = './music_cache'
-CACHE_MAP_FILE = 'cache_map.json'
-PLAYLIST_FILE = 'playlists.json'
-SETTINGS_FILE = 'server_settings.json'
-MAX_CACHE_SIZE_GB = 16
-
 if not os.path.exists(CACHE_DIR): 
     os.makedirs(CACHE_DIR)
-
-# ==========================================
-# 2. AUDIO & DOWNLOADER SETTINGS
-# ==========================================
-
-COLOR_MAIN = 0xFFD700  # Gold
-
-# --- FFmpeg Options ---
-FFMPEG_STREAM_OPTS = {
-    'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5 -nostdin',
-    'options': '-vn -threads 2 -bufsize 8192k'
-}
-FFMPEG_LOCAL_OPTS = {
-    'options': '-vn -threads 2 -bufsize 8192k'
-}
-
-# --- yt-dlp Options ---
-COMMON_YDL_ARGS = {
-    'quiet': True,
-    'no_warnings': True,
-    'noplaylist': True,
-    'socket_timeout': 30
-}
-
-# 1. Play: Stream high quality audio
-YDL_PLAY_OPTS = {
-    'format': 'bestaudio[ext=webm]/bestaudio/best',
-    **COMMON_YDL_ARGS
-}
-
-# 2. Flat: Fast metadata fetch (good for playlists/URLs)
-YDL_FLAT_OPTS = {
-    'extract_flat': 'in_playlist',
-    **COMMON_YDL_ARGS
-}
-
-# 3. Search: Deep metadata fetch (good for keywords to get accurate video URL)
-YDL_SEARCH_OPTS = {
-    'extract_flat': False,
-    **COMMON_YDL_ARGS
-}
-
-# 4. Mix: For Autoplay/Radio mode
-YDL_MIX_OPTS = {
-    'extract_flat': 'in_playlist',
-    'playlist_items': '1-20',
-    **COMMON_YDL_ARGS,
-    'noplaylist': False
-}
-
-# 5. Download: Save to cache with thumbnail
-YDL_DOWNLOAD_OPTS = {
-    'format': 'bestaudio[ext=webm]/bestaudio/best',
-    'outtmpl': f'{CACHE_DIR}/%(id)s.%(ext)s',
-    'writethumbnail': True,
-    'postprocessors': [{'key': 'FFmpegThumbnailsConvertor', 'format': 'jpg'}],
-    **COMMON_YDL_ARGS
-}
-
-# 6. Playlist Load: Batch loading
-YDL_PLAYLIST_LOAD_OPTS = {
-    'extract_flat': 'in_playlist',
-    'playlist_items': '1-50',
-    **COMMON_YDL_ARGS,
-    'noplaylist': False
-}
 
 # ==========================================
 # 3. HELPER FUNCTIONS
