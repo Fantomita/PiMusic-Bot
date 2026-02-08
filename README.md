@@ -59,8 +59,6 @@ Create a `.env` file in the root directory and add your bot token:
 DISCORD_TOKEN=your_discord_bot_token_here
 ```
 
-*(No ngrok token required! The bot automatically downloads and configures Cloudflare Tunnel.)*
-
 ## 🎮 Usage
 
 Run the bot using:
