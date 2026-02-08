@@ -752,9 +752,11 @@ DASHBOARD_HTML = """
                             const thumb = track.thumbnail ? track.thumbnail : 'https://via.placeholder.com/40';
                             const badge = track.suggested ? '<span class="tag-auto">Auto</span>' : '';
                             
-                            let buttons = `<button class="btn-del" onclick="removeTrack(${index})">✕</button>`;
+                            let buttons = '';
                             if (track.suggested) {
-                                buttons = `<button class="btn-action" onclick="regenerateSuggestion()" title="Regenerate">🎲</button>` + buttons;
+                                buttons = `<button class="btn-action" onclick="regenerateSuggestion()" title="Regenerate">🎲</button>`;
+                            } else {
+                                buttons = `<button class="btn-del" onclick="removeTrack(${index})">✕</button>`;
                             }
                             
                             div.innerHTML = `
@@ -1293,6 +1295,7 @@ class ServerState:
         self.processing_next = False 
         self.history = []
         self.autoplay = False
+        self.fetching_autoplay = False
         self.stopping = False
         self.last_text_channel = None 
 
@@ -1700,6 +1703,10 @@ class MusicBot(commands.Cog):
             state.queue = [t for t in state.queue if not t.get('suggested')]
             return
 
+        # Prevent concurrent fetches
+        if state.fetching_autoplay:
+            return
+
         # 2. If we already have a suggestion at the end, do nothing (unless forced via avoid_ids)
         if not avoid_ids and state.queue and state.queue[-1].get('suggested'):
             return
@@ -1717,6 +1724,7 @@ class MusicBot(commands.Cog):
         if not seed: return
 
         # 4. Fetch recommendation
+        state.fetching_autoplay = True
         try:
             # Run in executor to avoid blocking
             info = await self.bot.loop.run_in_executor(None, lambda: yt_dlp.YoutubeDL(YDL_MIX_OPTS).extract_info(f"https://www.youtube.com/watch?v={seed['id']}&list=RD{seed['id']}", download=False))
@@ -1740,10 +1748,16 @@ class MusicBot(commands.Cog):
                     # Pick random from top 5 for variety
                     e = random.choice(candidates)
                     track = {'id':e['id'], 'title':e['title'], 'author':e['uploader'], 'duration':format_time(e['duration']), 'duration_seconds':e['duration'], 'webpage':e['url'], 'suggested': True}
-                    state.queue.append(track)
+                    
+                    # Check again if a suggestion was added while fetching (though lock prevents most)
+                    # and ensure we don't have multiple
+                    if not state.queue or not state.queue[-1].get('suggested'):
+                         state.queue.append(track)
                     
         except Exception as e:
             log_error(f"Autoplay fetch failed: {e}")
+        finally:
+            state.fetching_autoplay = False
 
     async def regenerate_autoplay(self, guild_id):
         """Regenerates the current autoplay suggestion."""
