@@ -64,7 +64,7 @@ DISCORD_TOKEN=your_discord_bot_token_here
 Run the bot using:
 
 ```bash
-python bot.py
+python src/bot.py
 ```
 
 ### Discord Commands
