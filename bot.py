@@ -240,7 +240,7 @@ DASHBOARD_HTML = """
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>PiMusic Dashboard</title>
+    <title>{{ bot_name }} Dashboard</title>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&display=swap" rel="stylesheet">
     <style>
         :root {
@@ -634,7 +634,7 @@ DASHBOARD_HTML = """
 </head>
 <body>
     <div class="header">
-        <div class="logo">🎵 PiMusic</div>
+        <div class="logo">🎵 {{ bot_name }}</div>
         <div id="status-badge" class="status-badge"><div class="dot"></div> <span id="status-text">Disconnected</span></div>
     </div>
 
@@ -976,7 +976,8 @@ async def health_check():
 
 @app.route('/')
 async def home():
-    return await render_template_string(DASHBOARD_HTML)
+    name = bot.user.name if bot.user else "MusicBot"
+    return await render_template_string(DASHBOARD_HTML, bot_name=name)
 
 # --- API Routes ---
 
