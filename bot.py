@@ -964,6 +964,10 @@ async def auth_route():
 async def serve_thumbnail(filename):
     return await send_from_directory(CACHE_DIR, filename)
 
+@app.route('/health')
+async def health_check():
+    return "OK", 200
+
 @app.route('/')
 async def home():
     return await render_template_string(DASHBOARD_HTML)
@@ -1394,9 +1398,11 @@ class MusicBot(commands.Cog):
         self.bot = bot
         self.states = {}
         self.cleanup_loop.start()
+        self.tunnel_monitor.start()
         self.public_url = None
         self.web_auth_token = str(uuid4())
         self.tunnel_proc = None
+        self.drain_task = None
         
         # Store direct reference for reliable access in Quart
         app.config['BOT_COG'] = self
@@ -1407,6 +1413,8 @@ class MusicBot(commands.Cog):
 
     async def cog_unload(self):
         self.cleanup_loop.stop()
+        self.tunnel_monitor.stop()
+        if self.drain_task: self.drain_task.cancel()
         if self.tunnel_proc:
             try: self.tunnel_proc.terminate()
             except: pass
@@ -1437,9 +1445,55 @@ class MusicBot(commands.Cog):
             log_error(f"❌ Failed to download cloudflared: {e}")
             return False
 
+    async def drain_stderr(self, proc):
+        """Continuously reads stderr from the tunnel process to prevent buffer fill-up."""
+        while proc.poll() is None:
+            try:
+                line = await self.bot.loop.run_in_executor(None, proc.stderr.readline)
+                if not line:
+                    break
+                
+                # Still look for the URL if not found yet (backup)
+                if not self.public_url and "trycloudflare.com" in line:
+                    match = re.search(r'https://[a-zA-Z0-9-]+\.trycloudflare\.com', line)
+                    if match:
+                        self.public_url = match.group(0)
+                        log_info(f"🌍 Tunnel Active (found in drain): {self.public_url}")
+                
+                if "error" in line.lower():
+                    log_error(f"☁️ Cloudflared: {line.strip()}")
+            except Exception as e:
+                log_error(f"Error draining stderr: {e}")
+                break
+
+    @tasks.loop(seconds=30)
+    async def tunnel_monitor(self):
+        """Monitors the health of the tunnel and web server."""
+        if self.public_url:
+            # Check process
+            if self.tunnel_proc and self.tunnel_proc.poll() is not None:
+                log_error("⚠️ Cloudflared process died! Resetting public URL.")
+                self.public_url = None
+                if self.drain_task: self.drain_task.cancel()
+                return
+
+            # Check local responsiveness
+            try:
+                def check(): return requests.get("http://127.0.0.1:5000/health", timeout=5)
+                r = await self.bot.loop.run_in_executor(None, check)
+                if r.status_code != 200:
+                    log_error(f"⚠️ Local Web Server health check failed: {r.status_code}")
+            except Exception as e:
+                log_error(f"⚠️ Local Web Server unreachable: {e}")
+
     async def start_cloudflared(self):
         """Starts the tunnel and retrieves the URL."""
-        if self.public_url: return self.public_url
+        if self.public_url and self.tunnel_proc and self.tunnel_proc.poll() is None:
+            return self.public_url
+        
+        # Reset state
+        self.public_url = None
+        if self.drain_task: self.drain_task.cancel()
         
         # Download in background thread to avoid blocking heartbeat
         if not await self.bot.loop.run_in_executor(None, self.ensure_cloudflared):
@@ -1449,35 +1503,33 @@ class MusicBot(commands.Cog):
         try: subprocess.run(["pkill", "-f", "cloudflared tunnel"], capture_output=True)
         except: pass
 
+        log_info("☁️ Starting Cloudflared Tunnel...")
         # Use 127.0.0.1 to avoid IPv6/localhost resolution issues
         self.tunnel_proc = subprocess.Popen(
             ["./cloudflared", "tunnel", "--url", "http://127.0.0.1:5000"],
-            stdout=subprocess.PIPE,
+            stdout=subprocess.DEVNULL,
             stderr=subprocess.PIPE,
-            text=True
+            text=True,
+            bufsize=1
         )
 
-        # Scrape URL from stderr (Cloudflared logs to stderr)
+        # Start draining in background
+        self.drain_task = self.bot.loop.create_task(self.drain_stderr(self.tunnel_proc))
+
+        # Wait for URL
         start_time = time.time()
         while time.time() - start_time < 20:
-            # Check if process crashed
             if self.tunnel_proc.poll() is not None:
-                err = self.tunnel_proc.stderr.read()
-                log_error(f"❌ Cloudflared crashed: {err}")
+                log_error("❌ Cloudflared failed to start.")
                 return None
-
-            line = self.tunnel_proc.stderr.readline()
-            if not line:
-                await asyncio.sleep(0.1)
-                continue
-
-            if "trycloudflare.com" in line:
-                match = re.search(r'https://[a-zA-Z0-9-]+\.trycloudflare\.com', line)
-                if match:
-                    self.public_url = match.group(0)
-                    log_info(f"🌍 Tunnel Active: {self.public_url}")
-                    return self.public_url
-            await asyncio.sleep(0.1)
+            
+            if self.public_url:
+                log_info(f"🌍 Tunnel Active: {self.public_url}")
+                return self.public_url
+                
+            await asyncio.sleep(0.5)
+            
+        log_error("⏳ Cloudflared timed out waiting for URL.")
         return None
 
     @commands.Cog.listener()
