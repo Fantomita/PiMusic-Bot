@@ -253,7 +253,7 @@ DASHBOARD_HTML = """
 
         * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
         
-        body {
+        html, body {
             font-family: 'Outfit', sans-serif;
             background-color: var(--bg-dark);
             color: var(--text-main);
@@ -262,6 +262,7 @@ DASHBOARD_HTML = """
             min-height: 100vh;
             display: flex;
             flex-direction: column;
+            overflow-x: hidden; /* Fix horizontal scroll */
         }
 
         /* Ambient Background */
@@ -608,7 +609,7 @@ DASHBOARD_HTML = """
         /* Playlist Tools */
         .pl-tools { background: var(--bg-card); padding: 20px; border-radius: 20px; margin-bottom: 20px; border: 1px solid var(--border); }
         .pl-inputs { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 15px; }
-        .pl-input { background: #0a0a0a; border: 1px solid #333; color: white; padding: 12px; border-radius: 12px; font-family: inherit; }
+        .pl-input { background: #0a0a0a; border: 1px solid #333; color: white; padding: 12px; border-radius: 12px; font-family: inherit; width: 100%; box-sizing: border-box; }
         .btn-save { width: 100%; padding: 12px; background: #333; color: white; border: none; border-radius: 12px; font-weight: 600; cursor: pointer; transition:0.2s; }
         .btn-save:hover { background: var(--primary); color:black; }
 
@@ -620,6 +621,7 @@ DASHBOARD_HTML = """
             .album-art-container { width: 250px; padding-bottom: 250px; }
             .track-title { font-size: 1.4rem; }
             .tabs { top: 85px; }
+            .pl-inputs { grid-template-columns: 1fr; } /* Stack inputs on mobile */
         }
 
     </style>
