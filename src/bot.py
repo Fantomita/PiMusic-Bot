@@ -5,7 +5,6 @@ Optimized for Raspberry Pi / Linux Environments.
 
 import asyncio
 import datetime
-import json
 import logging
 import os
 import platform
@@ -24,7 +23,6 @@ import requests
 import yt_dlp
 from discord import app_commands, ui
 from discord.ext import commands, tasks
-from quart import Quart, jsonify, make_response, redirect, render_template, request, send_from_directory
 
 from config import (
     CACHE_DIR, CACHE_MAP_FILE, COLOR_MAIN, FFMPEG_LOCAL_OPTS, FFMPEG_STREAM_OPTS,
