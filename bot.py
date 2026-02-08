@@ -1416,7 +1416,9 @@ class MusicBot(commands.Cog):
         self.tunnel_monitor.stop()
         if self.drain_task: self.drain_task.cancel()
         if self.tunnel_proc:
-            try: self.tunnel_proc.terminate()
+            try: 
+                self.tunnel_proc.terminate()
+                await self.tunnel_proc.wait()
             except: pass
         if self.web_task: self.web_task.cancel()
 
@@ -1447,12 +1449,12 @@ class MusicBot(commands.Cog):
 
     async def drain_stderr(self, proc):
         """Continuously reads stderr from the tunnel process to prevent buffer fill-up."""
-        while proc.poll() is None:
+        while True:
+            line = await proc.stderr.readline()
+            if not line: break
+            
             try:
-                line = await self.bot.loop.run_in_executor(None, proc.stderr.readline)
-                if not line:
-                    break
-                
+                line = line.decode('utf-8')
                 # Still look for the URL if not found yet (backup)
                 if not self.public_url and "trycloudflare.com" in line:
                     match = re.search(r'https://[a-zA-Z0-9-]+\.trycloudflare\.com', line)
@@ -1462,16 +1464,14 @@ class MusicBot(commands.Cog):
                 
                 if "error" in line.lower():
                     log_error(f"☁️ Cloudflared: {line.strip()}")
-            except Exception as e:
-                log_error(f"Error draining stderr: {e}")
-                break
+            except: pass
 
     @tasks.loop(seconds=30)
     async def tunnel_monitor(self):
         """Monitors the health of the tunnel and web server."""
         if self.public_url:
             # Check process
-            if self.tunnel_proc and self.tunnel_proc.poll() is not None:
+            if self.tunnel_proc and self.tunnel_proc.returncode is not None:
                 log_error("⚠️ Cloudflared process died! Resetting public URL.")
                 self.public_url = None
                 if self.drain_task: self.drain_task.cancel()
@@ -1488,7 +1488,7 @@ class MusicBot(commands.Cog):
 
     async def start_cloudflared(self):
         """Starts the tunnel and retrieves the URL."""
-        if self.public_url and self.tunnel_proc and self.tunnel_proc.poll() is None:
+        if self.public_url and self.tunnel_proc and self.tunnel_proc.returncode is None:
             return self.public_url
         
         # Reset state
@@ -1505,12 +1505,10 @@ class MusicBot(commands.Cog):
 
         log_info("☁️ Starting Cloudflared Tunnel...")
         # Use 127.0.0.1 to avoid IPv6/localhost resolution issues
-        self.tunnel_proc = subprocess.Popen(
-            ["./cloudflared", "tunnel", "--url", "http://127.0.0.1:5000"],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.PIPE,
-            text=True,
-            bufsize=1
+        self.tunnel_proc = await asyncio.create_subprocess_exec(
+            "./cloudflared", "tunnel", "--url", "http://127.0.0.1:5000",
+            stdout=asyncio.subprocess.DEVNULL,
+            stderr=asyncio.subprocess.PIPE
         )
 
         # Start draining in background
@@ -1519,7 +1517,7 @@ class MusicBot(commands.Cog):
         # Wait for URL
         start_time = time.time()
         while time.time() - start_time < 20:
-            if self.tunnel_proc.poll() is not None:
+            if self.tunnel_proc.returncode is not None:
                 log_error("❌ Cloudflared failed to start.")
                 return None
             
