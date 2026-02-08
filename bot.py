@@ -1,3 +1,8 @@
+"""
+PiMusic Bot - Discord Music Bot with Web Dashboard
+Optimized for Raspberry Pi / Linux Environments.
+"""
+
 import asyncio
 import datetime
 import json
@@ -7,14 +12,12 @@ import platform
 import random
 import re
 import shutil
-import signal
 import stat
 import subprocess
 import sys
 import time
 from uuid import uuid4
 
-# --- Third Party Imports ---
 import discord
 import psutil
 import requests
@@ -43,8 +46,10 @@ def log_info(msg): logging.info(msg)
 
 # --- System Optimization ---
 sys.dont_write_bytecode = True
-try: os.nice(-15)  # Higher priority for audio process
-except: pass
+try:
+    os.nice(-15)  # Higher priority for audio process
+except Exception:
+    pass
 
 # --- Environment Variables ---
 load_dotenv()
@@ -61,7 +66,8 @@ PLAYLIST_FILE = 'playlists.json'
 SETTINGS_FILE = 'server_settings.json'
 MAX_CACHE_SIZE_GB = 16
 
-if not os.path.exists(CACHE_DIR): os.makedirs(CACHE_DIR)
+if not os.path.exists(CACHE_DIR): 
+    os.makedirs(CACHE_DIR)
 
 # ==========================================
 # 2. AUDIO & DOWNLOADER SETTINGS
@@ -433,8 +439,8 @@ DASHBOARD_HTML = """
         .btn-play:hover { background: #ffe033; box-shadow: 0 15px 35px rgba(255, 215, 0, 0.4); }
 
         .btn-auto.active { 
-            background: var(--primary-dim); 
-            color: var(--primary); 
+            background: var(--primary-dim);
+            color: var(--primary);
             border: 1px solid var(--primary);
         }
 
@@ -852,7 +858,7 @@ DASHBOARD_HTML = """
             } catch (e) { 
                 loader.style.display = 'none'; 
                 alert("Search failed"); 
-            }
+            } 
         }
 
         async function addDirect(url) {
@@ -930,7 +936,7 @@ def get_bot_token():
 
 @app.before_request
 def check_auth():
-    if request.path.startswith('/auth') or request.path.startswith('/cache'):
+    if request.path.startswith('/auth') or request.path.startswith('/cache') or request.path.startswith('/health'):
         return
     
     user_token = request.cookies.get('pi_music_auth')
@@ -1294,6 +1300,7 @@ class SelectionMenu(ui.Select):
             if val: options.append(discord.SelectOption(label=title, value=val))
         super().__init__(placeholder="Select a song...", options=options)
         self.cog, self.ctx = cog, ctx
+
     async def callback(self, interaction):
         if interaction.user != self.ctx.author: return
         await interaction.response.edit_message(content="✅ **Confirmed.**", view=None)
@@ -1460,7 +1467,7 @@ class MusicBot(commands.Cog):
                 line = line.decode('utf-8')
                 # Still look for the URL if not found yet (backup)
                 if not self.public_url and "trycloudflare.com" in line:
-                    match = re.search(r'https://[a-zA-Z0-9-]+\.trycloudflare\.com', line)
+                    match = re.search(r'https://[a-zA-Z0-9-]+\.trycloudflare.com', line)
                     if match:
                         self.public_url = match.group(0)
                         log_info(f"🌍 Tunnel Active (found in drain): {self.public_url}")
