@@ -387,10 +387,37 @@
             .container { grid-template-columns: 1fr; padding: 15px; gap: 20px; }
             .left-col { position: static; }
             .player-card { padding: 25px; }
-            .album-art-container { width: 250px; padding-bottom: 250px; }
+            .album-art-container { width: 60%; max-width: 250px; padding-bottom: 60%; margin: 0 auto 20px; }
             .track-title { font-size: 1.4rem; }
             .tabs { top: 85px; }
             .pl-inputs { grid-template-columns: 1fr; } /* Stack inputs on mobile */
+        }
+
+        @media (max-width: 480px) {
+            .header { padding: 15px; }
+            .logo { font-size: 1.3rem; }
+            .container { padding: 10px; gap: 15px; }
+            .player-card { padding: 20px; margin-bottom: 20px; }
+            .album-art-container { width: 70%; padding-bottom: 70%; }
+            
+            /* Compact Controls */
+            .controls { gap: 15px; }
+            .btn-ctrl { width: 48px; height: 48px; font-size: 1.2rem; }
+            .btn-play { width: 64px; height: 64px; font-size: 1.6rem; }
+            
+            /* Search & Inputs */
+            .search-input { padding: 15px 50px 15px 20px; font-size: 16px; /* Prevent iOS zoom */ }
+            .search-btn { width: 40px; }
+            
+            /* List Items */
+            .list-item, .res-item { padding: 12px; }
+            .list-thumb, .res-img { width: 45px; height: 45px; margin-right: 12px; }
+            .item-title { font-size: 0.95rem; }
+            .item-sub { font-size: 0.8rem; }
+            
+            /* Tabs */
+            .tabs { top: 70px; padding: 4px; }
+            .tab-btn { padding: 10px; font-size: 0.9rem; }
         }
 
     </style>
