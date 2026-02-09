@@ -390,7 +390,7 @@ async def api_add(guild_id):
     state = cog.get_state(guild.id)
     query = data['query']
     if not re.match(r'^https?://', query):
-        query = f\"ytsearch1:{query}\"
+        query = f"ytsearch1:{query}"
     
     if not state.last_text_channel:
         state.last_text_channel = guild.text_channels[0]
@@ -410,7 +410,7 @@ async def api_add(guild_id):
         info = await cog.bot.loop.run_in_executor(None, lambda: yt_dlp.YoutubeDL(YDL_FLAT_OPTS).extract_info(query, download=False))
         
         def process(e): 
-            url = e.get('webpage_url') or e.get('url') or f\"https://www.youtube.com/watch?v={e['id']}\"
+            url = e.get('webpage_url') or e.get('url') or f"https://www.youtube.com/watch?v={e['id']}"
             return {
                 'id': e['id'], 
                 'title': e['title'], 
@@ -430,7 +430,7 @@ async def api_add(guild_id):
                  def __init__(self, g, v):
                      self.guild = g
                      self.voice_client = v
-                     self.author = \"WebUser\"
+                     self.author = "WebUser"
                  async def send(self, *args, **kwargs): pass 
              
              await cog.play_next(DummyCtx(guild, guild.voice_client))
