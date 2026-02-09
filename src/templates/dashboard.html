@@ -80,6 +80,15 @@
             gap: 8px;
             border: 1px solid transparent;
             transition: 0.3s;
+            max-width: 180px;
+            min-width: 0;
+            overflow: hidden;
+        }
+
+        #status-text {
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
         }
 
         .status-badge.online {
@@ -105,6 +114,7 @@
         .left-col {
             position: sticky;
             top: 100px;
+            min-width: 0;
         }
 
         .right-col {
@@ -150,10 +160,12 @@
             font-weight: 700; 
             margin-bottom: 8px; 
             line-height: 1.2;
-            white-space: nowrap; 
-            overflow: hidden; 
-            text-overflow: ellipsis; 
             letter-spacing: -0.02em;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+            word-break: break-word;
         }
         .track-meta { 
             color: var(--text-muted); 
@@ -163,6 +175,10 @@
             display: inline-block;
             padding: 6px 16px;
             border-radius: 12px;
+            max-width: 100%;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
         }
 
         /* Controls */
@@ -186,6 +202,7 @@
             align-items: center;
             justify-content: center;
             font-size: 1.4rem;
+            flex-shrink: 0;
         }
 
         .btn-ctrl:hover { background: rgba(255,255,255,0.1); transform: translateY(-2px); }
@@ -198,6 +215,7 @@
             height: 75px;
             font-size: 2rem;
             box-shadow: 0 10px 30px rgba(255, 215, 0, 0.3);
+            flex-shrink: 0;
         }
         .btn-play:hover { background: #ffe033; box-shadow: 0 15px 35px rgba(255, 215, 0, 0.4); }
 
@@ -276,6 +294,10 @@
             cursor: pointer;
             transition: 0.3s;
             font-family: inherit;
+            min-width: 0;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
         }
 
         .tab-btn.active {
@@ -303,6 +325,7 @@
             border-radius: 16px;
             margin-bottom: 10px;
             transition: 0.2s;
+            min-width: 0;
         }
         
         .res-item { cursor: pointer; }
@@ -323,8 +346,8 @@
             flex-shrink: 0;
         }
 
-        .item-info { flex: 1; overflow: hidden; margin-right: 15px; display: flex; align-items: center; }
-        .item-text { overflow: hidden; }
+        .item-info { flex: 1; overflow: hidden; margin-right: 10px; display: flex; align-items: center; min-width: 0; }
+        .item-text { overflow: hidden; flex: 1; min-width: 0; }
         .item-title { font-weight: 600; font-size: 1rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 4px; }
         .item-sub { font-size: 0.85rem; color: var(--text-muted); }
 
