@@ -726,6 +726,13 @@ class MusicBot(commands.Cog):
         embed = discord.Embed(description="⏭️ Skipped.", color=COLOR_MAIN)
         await ctx.send(embed=embed, silent=True)
 
+    @commands.hybrid_command(name="clear", description="Clear the music queue")
+    async def clear(self, ctx):
+        state = self.get_state(ctx.guild.id)
+        state.queue = []
+        embed = discord.Embed(description="🗑️ Queue cleared.", color=COLOR_MAIN)
+        await ctx.send(embed=embed, silent=True)
+
     @commands.hybrid_command(name="queue", aliases=["q"])
     async def queue(self, ctx):
         state = self.get_state(ctx.guild.id)

@@ -344,6 +344,8 @@ async def api_control(guild_id, action):
             vc.resume()
     elif action == 'skip' and vc:
         vc.stop()
+    elif action == 'clear':
+        state.queue = []
     elif action == 'shuffle':
         user_queue = [t for t in state.queue if not t.get('suggested')]
         suggested = [t for t in state.queue if t.get('suggested')]
