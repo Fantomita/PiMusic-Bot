@@ -46,12 +46,19 @@ def get_bot_token():
         return cog.web_auth_token
     return None
 
-def get_target_guild():
-    """Returns the target guild based on cookie or fallback."""
+def get_target_guild(guild_id=None):
+    """Returns the target guild based on URL param, cookie, or fallback."""
     cog = get_bot_cog()
     if not cog or not cog.bot: return None
     
-    # Try cookie
+    # 1. Try URL param (highest priority)
+    if guild_id:
+        try:
+            guild = cog.bot.get_guild(int(guild_id))
+            if guild: return guild
+        except: pass
+
+    # 2. Try cookie
     g_id = request.cookies.get('pi_music_guild_id')
     if g_id:
         try:
@@ -92,7 +99,7 @@ async def auth_route():
     server_token = get_bot_token()
     
     if token_from_url == server_token:
-        resp = await make_response(redirect('/'))
+        resp = await make_response(redirect(f'/dashboard/{guild_id}' if guild_id else '/'))
         # Using Lax SameSite policy to allow cookie to set during redirect
         resp.set_cookie('pi_music_auth', token_from_url, max_age=86400, samesite='Lax')
         if guild_id:
@@ -111,16 +118,33 @@ async def health_check():
     return "OK", 200
 
 @app.route('/')
-async def home():
+async def home_redirect():
+    g_id = request.cookies.get('pi_music_guild_id')
+    if g_id:
+        return redirect(f'/dashboard/{g_id}')
+    
+    guild = get_first_available_guild()
+    if guild:
+        return redirect(f'/dashboard/{guild.id}')
+    
+    return "❌ No server found. Use /link in Discord.", 404
+
+@app.route('/dashboard/<int:guild_id>')
+async def dashboard(guild_id):
     cog = get_bot_cog()
-    name = cog.bot.user.name if cog and cog.bot and cog.bot.user else "MusicBot"
-    return await render_template('dashboard.html', bot_name=name)
+    if not cog or not cog.bot: return redirect('/')
+    
+    guild = cog.bot.get_guild(guild_id)
+    if not guild: return "❌ Bot is not in this server.", 404
+    
+    name = cog.bot.user.name if cog.bot.user else "MusicBot"
+    return await render_template('dashboard.html', bot_name=name, guild_id=guild_id)
 
 # --- API Routes ---
 
-@app.route('/api/status')
-async def api_status():
-    guild = get_target_guild()
+@app.route('/api/<int:guild_id>/status')
+async def api_status(guild_id):
+    guild = get_target_guild(guild_id)
     cog = get_bot_cog()
     
     # Debug info
@@ -153,8 +177,8 @@ async def api_status():
         
     return jsonify({'current': current, 'queue': queue_data, 'guild': guild.name, 'autoplay': state.autoplay})
 
-@app.route('/api/playlists', methods=['GET'])
-async def api_get_playlists():
+@app.route('/api/<int:guild_id>/playlists', methods=['GET'])
+async def api_get_playlists(guild_id):
     data = []
     for name, content in saved_playlists.items():
         if isinstance(content, list):
@@ -163,8 +187,8 @@ async def api_get_playlists():
             data.append({'name': name, 'count': 0, 'type': 'live'})
     return jsonify(data)
 
-@app.route('/api/playlists/save', methods=['POST'])
-async def api_save_playlist():
+@app.route('/api/<int:guild_id>/playlists/save', methods=['POST'])
+async def api_save_playlist(guild_id):
     data = await request.get_json()
     name = data.get('name', '').lower()
     url = data.get('url', '')
@@ -181,7 +205,7 @@ async def api_save_playlist():
         return jsonify({'status': 'ok'})
     
     # Save current queue
-    guild = get_target_guild()
+    guild = get_target_guild(guild_id)
     cog = get_bot_cog()
     if not guild or not cog:
         return jsonify({'error': 'No guild'}), 400
@@ -209,15 +233,15 @@ async def api_save_playlist():
     save_json(PLAYLIST_FILE, saved_playlists)
     return jsonify({'status': 'ok'})
 
-@app.route('/api/playlists/load', methods=['POST'])
-async def api_load_playlist():
+@app.route('/api/<int:guild_id>/playlists/load', methods=['POST'])
+async def api_load_playlist(guild_id):
     data = await request.get_json()
     name = data.get('name', '').lower()
     
     if name not in saved_playlists:
         return jsonify({'error': 'Not found'}), 404
         
-    guild = get_target_guild()
+    guild = get_target_guild(guild_id)
     cog = get_bot_cog()
     if not guild or not cog:
         return jsonify({'error': 'No guild'}), 400
@@ -269,16 +293,16 @@ async def api_load_playlist():
         
     return jsonify({'error': 'Empty'}), 400
 
-@app.route('/api/playlists/delete', methods=['POST'])
-async def api_del_playlist():
+@app.route('/api/<int:guild_id>/playlists/delete', methods=['POST'])
+async def api_del_playlist(guild_id):
     data = await request.get_json()
     if data['name'] in saved_playlists:
         del saved_playlists[data['name']]
         save_json(PLAYLIST_FILE, saved_playlists)
     return jsonify({'status': 'ok'})
 
-@app.route('/api/search', methods=['POST'])
-async def api_search():
+@app.route('/api/<int:guild_id>/search', methods=['POST'])
+async def api_search(guild_id):
     data = await request.get_json()
     cog = get_bot_cog()
     if not cog: return jsonify([]), 500
@@ -303,9 +327,9 @@ async def api_search():
     except Exception:
         return jsonify([]), 500
 
-@app.route('/api/control/<action>', methods=['POST'])
-async def api_control(action):
-    guild = get_target_guild()
+@app.route('/api/<int:guild_id>/control/<action>', methods=['POST'])
+async def api_control(guild_id, action):
+    guild = get_target_guild(guild_id)
     cog = get_bot_cog()
     if not guild or not cog:
         return jsonify({'error': 'No guild'}), 400
@@ -341,9 +365,9 @@ async def api_control(action):
         
     return jsonify({'status':'ok'})
 
-@app.route('/api/remove/<int:index>', methods=['POST'])
-async def api_remove(index):
-    guild = get_target_guild()
+@app.route('/api/<int:guild_id>/remove/<int:index>', methods=['POST'])
+async def api_remove(guild_id, index):
+    guild = get_target_guild(guild_id)
     cog = get_bot_cog()
     if not guild or not cog:
         return jsonify({'error': 'No guild'}), 400
@@ -355,10 +379,10 @@ async def api_remove(index):
         del state.queue[index]
     return jsonify({'status': 'ok'})
 
-@app.route('/api/add', methods=['POST'])
-async def api_add():
+@app.route('/api/<int:guild_id>/add', methods=['POST'])
+async def api_add(guild_id):
     data = await request.get_json()
-    guild = get_target_guild()
+    guild = get_target_guild(guild_id)
     cog = get_bot_cog()
     if not guild or not cog:
         return jsonify({'error': 'No guild'}), 400
@@ -366,7 +390,7 @@ async def api_add():
     state = cog.get_state(guild.id)
     query = data['query']
     if not re.match(r'^https?://', query):
-        query = f"ytsearch1:{query}"
+        query = f\"ytsearch1:{query}\"
     
     if not state.last_text_channel:
         state.last_text_channel = guild.text_channels[0]
@@ -386,7 +410,7 @@ async def api_add():
         info = await cog.bot.loop.run_in_executor(None, lambda: yt_dlp.YoutubeDL(YDL_FLAT_OPTS).extract_info(query, download=False))
         
         def process(e): 
-            url = e.get('webpage_url') or e.get('url') or f"https://www.youtube.com/watch?v={e['id']}"
+            url = e.get('webpage_url') or e.get('url') or f\"https://www.youtube.com/watch?v={e['id']}\"
             return {
                 'id': e['id'], 
                 'title': e['title'], 
@@ -406,7 +430,7 @@ async def api_add():
                  def __init__(self, g, v):
                      self.guild = g
                      self.voice_client = v
-                     self.author = "WebUser"
+                     self.author = \"WebUser\"
                  async def send(self, *args, **kwargs): pass 
              
              await cog.play_next(DummyCtx(guild, guild.voice_client))

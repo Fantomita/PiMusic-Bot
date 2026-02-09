@@ -454,6 +454,7 @@
 
     <script>
         // State
+        const guild_id = "{{ guild_id }}";
         let currentTab = 'queue';
         let lastStatus = null;
 
@@ -469,7 +470,7 @@
 
         async function fetchStatus() {
             try {
-                const res = await fetch('/api/status');
+                const res = await fetch(`/api/${guild_id}/status`);
                 if (res.status === 403) { window.location.reload(); return; }
                 const data = await res.json();
                 
@@ -542,7 +543,7 @@
 
         async function fetchPlaylists() {
             try {
-                const res = await fetch('/api/playlists');
+                const res = await fetch(`/api/${guild_id}/playlists`);
                 const data = await res.json();
                 const list = document.getElementById('playlist-list');
                 list.innerHTML = '';
@@ -589,7 +590,7 @@
             loader.style.display = 'block';
 
             try {
-                const res = await fetch('/api/search', { 
+                const res = await fetch(`/api/${guild_id}/search`, { 
                     method: 'POST', 
                     headers: {'Content-Type': 'application/json'}, 
                     body: JSON.stringify({query: input.value}) 
@@ -602,10 +603,10 @@
                 results.forEach(item => {
                     const div = document.createElement('div');
                     div.className = 'res-item';
-                    div.onclick = () => { 
-                        addDirect(item.url); 
-                        resDiv.style.display='none'; 
-                        document.getElementById('urlInput').value = ''; 
+                    div.onclick = () => {
+                        addDirect(item.url);
+                        resDiv.style.display='none';
+                        document.getElementById('urlInput').value = '';
                     };
                     div.innerHTML = `
                         <img src="${item.thumbnail}" class="res-img" onerror="this.src='https://via.placeholder.com/50'">
@@ -629,20 +630,20 @@
         async function addDirect(url) {
             document.getElementById('urlInput').value = '';
             // Show optimistic feedback if you wanted, but status update will handle it
-            await fetch('/api/add', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({query: url}) });
+            await fetch(`/api/${guild_id}/add`, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({query: url}) });
             fetchStatus();
         }
 
-        async function regenerateSuggestion() { await fetch('/api/control/regenerate', { method: 'POST' }); fetchStatus(); }
-        async function control(action) { await fetch(`/api/control/${action}`, { method: 'POST' }); fetchStatus(); }
-        async function removeTrack(index) { await fetch(`/api/remove/${index}`, { method: 'POST' }); fetchStatus(); }
+        async function regenerateSuggestion() { await fetch(`/api/${guild_id}/control/regenerate`, { method: 'POST' }); fetchStatus(); }
+        async function control(action) { await fetch(`/api/${guild_id}/control/${action}`, { method: 'POST' }); fetchStatus(); }
+        async function removeTrack(index) { await fetch(`/api/${guild_id}/remove/${index}`, { method: 'POST' }); fetchStatus(); }
         
         async function savePlaylist() {
             const name = document.getElementById('plName').value;
             const url = document.getElementById('plUrl').value;
             if(!name) return alert("Name required");
             const body = {name: name}; if(url) body.url = url;
-            await fetch('/api/playlists/save', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body) });
+            await fetch(`/api/${guild_id}/playlists/save`, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body) });
             document.getElementById('plName').value = ""; document.getElementById('plUrl').value = "";
             fetchPlaylists();
         }
@@ -651,14 +652,14 @@
             if(!confirm(`Load "${name}"?`)) return;
             const originalHTML = btn.innerHTML;
             btn.innerHTML = '⏳';
-            await fetch('/api/playlists/load', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({name: name}) });
+            await fetch(`/api/${guild_id}/playlists/load`, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({name: name}) });
             fetchStatus();
             btn.innerHTML = originalHTML;
         }
 
         async function deletePlaylist(name) {
             if(!confirm("Delete?")) return;
-            await fetch('/api/playlists/delete', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({name: name}) });
+            await fetch(`/api/${guild_id}/playlists/delete`, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({name: name}) });
             fetchPlaylists();
         }
 
