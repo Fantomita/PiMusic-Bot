@@ -430,17 +430,10 @@ async def api_add(guild_id):
         else:
             state.queue.append(process(info))
         
+        # Ensure autoplay suggestion is at the end
+        cog.bot.loop.create_task(cog.ensure_autoplay(guild.id))
+
         if guild.voice_client and not guild.voice_client.is_playing() and not state.processing_next:
-             class DummyCtx:
-                 def __init__(self, g, v):
-                     self.guild = g
-                     self.voice_client = v
-                     self.author = "WebUser"
-                 async def send(self, *args, **kwargs): pass 
-             
-             await cog.play_next(DummyCtx(guild, guild.voice_client))
-        else:
-             cog.bot.loop.create_task(cog.ensure_autoplay(guild.id))
 
         return jsonify({'status':'ok'})
     except Exception:

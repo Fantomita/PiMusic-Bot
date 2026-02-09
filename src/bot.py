@@ -469,7 +469,7 @@ class MusicBot(commands.Cog):
             pass
 
     async def ensure_autoplay(self, guild_id, avoid_ids=None):
-        """Logic for buffering the next suggested song."""
+        """Logic for buffering exactly one suggested song at the end of the queue."""
         state = self.get_state(guild_id)
         if avoid_ids is None: avoid_ids = []
         
@@ -482,11 +482,18 @@ class MusicBot(commands.Cog):
         if state.fetching_autoplay:
             return
 
-        # 2. If we already have a suggestion at the end, do nothing (unless forced via avoid_ids)
-        if not avoid_ids and state.queue and state.queue[-1].get('suggested'):
-            return
+        # 2. Always maintain exactly one suggestion at the end. 
+        # First, remove any existing suggestions that aren't at the very end or if there are multiples.
+        suggestions = [t for t in state.queue if t.get('suggested')]
+        if suggestions:
+            # Keep only the last one if it's already at the end, otherwise we'll fetch a fresh one
+            if not state.queue[-1].get('suggested') or len(suggestions) > 1:
+                state.queue = [t for t in state.queue if not t.get('suggested')]
+            else:
+                # Already have exactly one at the end
+                return
 
-        # 3. Find a seed track (last in queue, or current)
+        # 3. Find a seed track (last user track in queue, or current)
         seed = None
         for t in reversed(state.queue):
             if not t.get('suggested'): 
@@ -516,18 +523,19 @@ class MusicBot(commands.Cog):
                     if eid in avoid_ids: continue
                     if eid in recent_ids: continue
                     
+                    # Also avoid tracks already in queue
+                    if any(t['id'] == eid for t in state.queue): continue
+                    
                     candidates.append(e)
-                    if len(candidates) >= 5: break # Get top 5 valid candidates
+                    if len(candidates) >= 5: break
                 
                 if candidates:
-                    # Pick random from top 5 for variety
                     e = random.choice(candidates)
                     track = {'id':e['id'], 'title':e['title'], 'author':e['uploader'], 'duration':format_time(e['duration']), 'duration_seconds':e['duration'], 'webpage':e['url'], 'suggested': True}
                     
-                    # Check again if a suggestion was added while fetching (though lock prevents most)
-                    # and ensure we don't have multiple
-                    if not state.queue or not state.queue[-1].get('suggested'):
-                         state.queue.append(track)
+                    # Double check no suggestions were added
+                    state.queue = [t for t in state.queue if not t.get('suggested')]
+                    state.queue.append(track)
                     
         except Exception as e:
             log_error(f"Autoplay fetch failed: {e}")
@@ -594,10 +602,10 @@ class MusicBot(commands.Cog):
             state.queue.append(proc(info))
             if ctx.voice_client.is_playing(): await send_res(f"✅ Queued: **{info['title']}**")
             
+        # Re-verify autoplay (moves suggestion to end)
+        self.bot.loop.create_task(self.ensure_autoplay(ctx.guild.id))
+
         if not ctx.voice_client.is_playing(): await self.play_next(ctx)
-        else: 
-            # If playing, ensure we have an autoplay queued after this new one
-            self.bot.loop.create_task(self.ensure_autoplay(ctx.guild.id))
 
     async def play_next(self, ctx):
         """Recursive function to play the next song in the queue."""
