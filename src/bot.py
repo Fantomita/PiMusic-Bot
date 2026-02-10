@@ -575,7 +575,8 @@ class MusicBot(commands.Cog):
                 except Exception as e: return await ctx.send(embed=discord.Embed(description=f"❌ Error joining VC: {e}", color=discord.Color.red()), silent=True)
             else: return await ctx.send(embed=discord.Embed(description="❌ You must be in a Voice Channel!", color=discord.Color.red()), silent=True)
 
-        if ctx.interaction: await ctx.interaction.response.defer()
+        if ctx.interaction and not ctx.interaction.response.is_done(): 
+            await ctx.interaction.response.defer()
         
         # Use Flat Options (verified working)
         info = await self.bot.loop.run_in_executor(None, lambda: yt_dlp.YoutubeDL(YDL_FLAT_OPTS).extract_info(query, download=False))
