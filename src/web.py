@@ -426,7 +426,7 @@ async def api_add(guild_id):
             }
         
         if 'entries' in info:
-            state.queue.append(process(info['entries'][0]))
+            state.queue.extend([process(e) for e in info['entries'] if e])
         else:
             state.queue.append(process(info))
         

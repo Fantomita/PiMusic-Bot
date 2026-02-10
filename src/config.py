@@ -39,7 +39,9 @@ YDL_PLAY_OPTS = {
 
 YDL_FLAT_OPTS = {
     'extract_flat': 'in_playlist',
-    **COMMON_YDL_ARGS
+    'playlist_items': '1-100',
+    **COMMON_YDL_ARGS,
+    'noplaylist': False
 }
 
 YDL_SEARCH_OPTS = {
