@@ -400,9 +400,6 @@ async def api_add(guild_id):
     if not state.last_text_channel:
         state.last_text_channel = guild.text_channels[0]
     
-    # Clear suggestions so user song plays next
-    state.queue = [t for t in state.queue if not t.get('suggested')]
-
     try:
         # Try to connect if not in VC
         if not guild.voice_client:
@@ -414,6 +411,9 @@ async def api_add(guild_id):
         # Use Flat Options (verified working)
         info = await cog.bot.loop.run_in_executor(None, lambda: yt_dlp.YoutubeDL(YDL_FLAT_OPTS).extract_info(query, download=False))
         
+        # Clear suggestions right before adding to ensure they are at the bottom
+        state.queue = [t for t in state.queue if not t.get('suggested')]
+
         def process(e): 
             url = e.get('webpage_url') or e.get('url') or f"https://www.youtube.com/watch?v={e['id']}"
             return {

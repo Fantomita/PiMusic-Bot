@@ -565,9 +565,6 @@ class MusicBot(commands.Cog):
         state.stopping = False
         if hasattr(ctx, 'channel'): state.last_text_channel = ctx.channel
         
-        # Clear suggestions so user song plays next
-        state.queue = [t for t in state.queue if not t.get('suggested')]
-        
         # VC Join Logic
         if not ctx.voice_client:
             if ctx.author.voice: 
@@ -581,6 +578,9 @@ class MusicBot(commands.Cog):
         # Use Flat Options (verified working)
         info = await self.bot.loop.run_in_executor(None, lambda: yt_dlp.YoutubeDL(YDL_FLAT_OPTS).extract_info(query, download=False))
         
+        # Clear suggestions right before adding to ensure they are at the bottom
+        state.queue = [t for t in state.queue if not t.get('suggested')]
+
         def proc(e): 
             url = e.get('webpage_url') or e.get('url') or f"https://www.youtube.com/watch?v={e['id']}"
             return {
