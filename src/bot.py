@@ -468,35 +468,34 @@ class MusicBot(commands.Cog):
         except Exception:
             pass
 
-    async def ensure_autoplay(self, guild_id, avoid_ids=None):
+    async def ensure_autoplay(self, guild_id, avoid_ids=None, force=False):
         """Logic for buffering exactly one suggested song at the end of the queue."""
         state = self.get_state(guild_id)
         if avoid_ids is None: avoid_ids = []
         
         # 1. If Autoplay is OFF, remove any suggested tracks
         if not state.autoplay:
-            state.queue = [t for t in state.queue if not t.get('suggested')]
+            state.queue = [t for t in state.queue if not (isinstance(t, dict) and t.get('suggested'))]
             return
 
-        # Prevent concurrent fetches
-        if state.fetching_autoplay:
+        # Prevent concurrent fetches (unless forced, but even then we should be careful)
+        if state.fetching_autoplay and not force:
             return
 
         # 2. Always maintain exactly one suggestion at the end. 
-        # First, remove any existing suggestions that aren't at the very end or if there are multiples.
-        suggestions = [t for t in state.queue if t.get('suggested')]
+        # If forced, we clear and re-fetch. Otherwise, we only clear if it's not at the end.
+        suggestions = [t for t in state.queue if isinstance(t, dict) and t.get('suggested')]
         if suggestions:
-            # Keep only the last one if it's already at the end, otherwise we'll fetch a fresh one
-            if not state.queue[-1].get('suggested') or len(suggestions) > 1:
-                state.queue = [t for t in state.queue if not t.get('suggested')]
+            if force or not state.queue[-1].get('suggested') or len(suggestions) > 1:
+                state.queue = [t for t in state.queue if not (isinstance(t, dict) and t.get('suggested'))]
             else:
-                # Already have exactly one at the end
+                # Already have exactly one at the end and not forced
                 return
 
         # 3. Find a seed track (last user track in queue, or current)
         seed = None
         for t in reversed(state.queue):
-            if not t.get('suggested'): 
+            if isinstance(t, dict) and not t.get('suggested'): 
                 seed = t
                 break
         
@@ -524,7 +523,7 @@ class MusicBot(commands.Cog):
                     if eid in recent_ids: continue
                     
                     # Also avoid tracks already in queue
-                    if any(t['id'] == eid for t in state.queue): continue
+                    if any(isinstance(t, dict) and t['id'] == eid for t in state.queue): continue
                     
                     candidates.append(e)
                     if len(candidates) >= 5: break
@@ -534,7 +533,7 @@ class MusicBot(commands.Cog):
                     track = {'id':e['id'], 'title':e['title'], 'author':e['uploader'], 'duration':format_time(e['duration']), 'duration_seconds':e['duration'], 'webpage':e['url'], 'suggested': True}
                     
                     # Double check no suggestions were added
-                    state.queue = [t for t in state.queue if not t.get('suggested')]
+                    state.queue = [t for t in state.queue if not (isinstance(t, dict) and t.get('suggested'))]
                     state.queue.append(track)
                     
         except Exception as e:
@@ -551,11 +550,11 @@ class MusicBot(commands.Cog):
         if state.queue and state.queue[-1].get('suggested'):
             old_suggestion = state.queue.pop() # Remove it
             # Avoid this one, and also ensure we don't pick it again immediately
-            await self.ensure_autoplay(guild_id, avoid_ids=[old_suggestion['id']])
+            await self.ensure_autoplay(guild_id, avoid_ids=[old_suggestion['id']], force=True)
             return True
         else:
             # No suggestion present, just ensure one
-            await self.ensure_autoplay(guild_id)
+            await self.ensure_autoplay(guild_id, force=True)
             return True
 
     async def prepare_song(self, ctx, query):
@@ -564,6 +563,9 @@ class MusicBot(commands.Cog):
         state.last_interaction = datetime.datetime.now()
         state.stopping = False
         if hasattr(ctx, 'channel'): state.last_text_channel = ctx.channel
+        
+        # 1. Aggressive clear (before potential awaits)
+        state.queue = [t for t in state.queue if not (isinstance(t, dict) and t.get('suggested'))]
         
         # VC Join Logic
         if not ctx.voice_client:
@@ -578,8 +580,8 @@ class MusicBot(commands.Cog):
         # Use Flat Options (verified working)
         info = await self.bot.loop.run_in_executor(None, lambda: yt_dlp.YoutubeDL(YDL_FLAT_OPTS).extract_info(query, download=False))
         
-        # Clear suggestions right before adding to ensure they are at the bottom
-        state.queue = [t for t in state.queue if not t.get('suggested')]
+        # 2. Aggressive clear (after awaits, ensures we clear any suggestion added during info extraction)
+        state.queue = [t for t in state.queue if not (isinstance(t, dict) and t.get('suggested'))]
 
         def proc(e): 
             url = e.get('webpage_url') or e.get('url') or f"https://www.youtube.com/watch?v={e['id']}"
@@ -604,7 +606,7 @@ class MusicBot(commands.Cog):
             if ctx.voice_client.is_playing(): await send_res(f"✅ Queued: **{info['title']}**")
             
         # Re-verify autoplay (moves suggestion to end)
-        self.bot.loop.create_task(self.ensure_autoplay(ctx.guild.id))
+        self.bot.loop.create_task(self.ensure_autoplay(ctx.guild.id, force=True))
 
         if not ctx.voice_client.is_playing(): await self.play_next(ctx)
 

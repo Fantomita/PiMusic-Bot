@@ -400,6 +400,9 @@ async def api_add(guild_id):
     if not state.last_text_channel:
         state.last_text_channel = guild.text_channels[0]
     
+    # 1. Aggressive clear (before awaits)
+    state.queue = [t for t in state.queue if not (isinstance(t, dict) and t.get('suggested'))]
+
     try:
         # Try to connect if not in VC
         if not guild.voice_client:
@@ -411,8 +414,8 @@ async def api_add(guild_id):
         # Use Flat Options (verified working)
         info = await cog.bot.loop.run_in_executor(None, lambda: yt_dlp.YoutubeDL(YDL_FLAT_OPTS).extract_info(query, download=False))
         
-        # Clear suggestions right before adding to ensure they are at the bottom
-        state.queue = [t for t in state.queue if not t.get('suggested')]
+        # 2. Aggressive clear (after awaits)
+        state.queue = [t for t in state.queue if not (isinstance(t, dict) and t.get('suggested'))]
 
         def process(e): 
             url = e.get('webpage_url') or e.get('url') or f"https://www.youtube.com/watch?v={e['id']}"
@@ -431,7 +434,7 @@ async def api_add(guild_id):
             state.queue.append(process(info))
         
         # Ensure autoplay suggestion is at the end
-        cog.bot.loop.create_task(cog.ensure_autoplay(guild.id))
+        cog.bot.loop.create_task(cog.ensure_autoplay(guild.id, force=True))
 
         if guild.voice_client and not guild.voice_client.is_playing() and not state.processing_next:
              class DummyCtx:
