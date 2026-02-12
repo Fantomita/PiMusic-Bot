@@ -1004,10 +1004,11 @@ class MusicBot(commands.Cog):
     @commands.hybrid_command(name="help", description="Show all commands")
     async def help(self, ctx):
         embed = discord.Embed(title="🎵 PiMusic Bot Commands", description="Control your music with these commands:", color=COLOR_MAIN)
-        embed.add_field(name="🎵 Music", value="`/play [song/url]` - Play music\n`/pause` / `/resume`\n`/skip`\n`/stop`\n`/autoplay`", inline=False)
+        embed.add_field(name="🎵 Music", value="`/play [song]` - Play music\n`/pause` / `/resume`\n`/skip`\n`/stop`\n`/autoplay`\n`/new` - Regen recommendation", inline=False)
         embed.add_field(name="🎛️ Dashboard", value="`/link` - Get Web Panel\n`/setchannel` - Set output channel", inline=False)
         embed.add_field(name="📂 Playlists", value="`/saveplaylist`\n`/loadplaylist`\n`/listplaylists`\n`/delplaylist`", inline=False)
-        embed.add_field(name="📜 Queue", value="`/queue`\n`/history`\n`/shuffle`", inline=False)
+        embed.add_field(name="📜 Queue", value="`/queue`\n`/history`\n`/shuffle`\n`/clear`", inline=False)
+        embed.add_field(name="🎮 Games", value="`/guess [search]` - Start song quiz", inline=False)
         embed.add_field(name="⚙️ Utils", value="`/search`\n`/cache`\n`/dash`", inline=False)
         await ctx.send(embed=embed, silent=True)
 
