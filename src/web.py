@@ -12,7 +12,7 @@ from config import (
     CACHE_DIR, PLAYLIST_FILE, YDL_FLAT_OPTS, YDL_PLAYLIST_LOAD_OPTS
 )
 from utils import (
-    log_error, save_json, format_time, get_thumbnail_url, 
+    log_error, log_info, save_json, format_time, get_thumbnail_url, 
     cache_map, saved_playlists
 )
 
