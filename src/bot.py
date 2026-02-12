@@ -142,6 +142,39 @@ class MusicControlView(ui.View):
         await self.cog.stop_logic(self.guild_id)
         await interaction.response.send_message("👋 Stopping & Saving...", ephemeral=True, silent=True)
 
+class GuessModeSelectView(ui.View):
+    """View to select the game mode for the Guess game."""
+    def __init__(self, cog, ctx, seed_song):
+        super().__init__(timeout=60)
+        self.cog = cog
+        self.ctx = ctx
+        self.seed_song = seed_song
+
+    @ui.button(label="Guess the Title", emoji="🎵", style=discord.ButtonStyle.primary)
+    async def guess_title(self, interaction, button):
+        await self.start_game(interaction, "title")
+
+    @ui.button(label="Guess the Author", emoji="🎤", style=discord.ButtonStyle.primary)
+    async def guess_author(self, interaction, button):
+        await self.start_game(interaction, "author")
+
+    @ui.button(label="Guess Both", emoji="📀", style=discord.ButtonStyle.primary)
+    async def guess_both(self, interaction, button):
+        await self.start_game(interaction, "both")
+
+    async def start_game(self, interaction, mode):
+        if interaction.user != self.ctx.author:
+            return await interaction.response.send_message("❌ This menu is not for you!", ephemeral=True)
+            
+        state = self.cog.get_state(self.ctx.guild.id)
+        if state.game:
+            await interaction.response.edit_message(content="❌ A game is already in progress!", view=None)
+            return
+        
+        await interaction.response.edit_message(content=f"🎮 Starting **Guess the {mode.capitalize()}** game...", view=None)
+        state.game = GuessGame(self.cog, self.ctx, seed_song=self.seed_song, mode=mode)
+        await state.game.start()
+
 class GuessGameView(ui.View):
     """Buttons for the Guess the Song game."""
     def __init__(self, game):
@@ -1166,7 +1199,7 @@ class MusicBot(commands.Cog):
         app_commands.Choice(name="Guess the Author", value="author"),
         app_commands.Choice(name="Guess Both (Artist - Title)", value="both")
     ])
-    async def guess_command(self, ctx, search: str = None, mode: str = "title"):
+    async def guess_command(self, ctx, search: str = None, mode: str = None):
         state = self.get_state(ctx.guild.id)
         if state.game:
             return await ctx.send("❌ A game is already in progress!", ephemeral=True)
@@ -1203,6 +1236,12 @@ class MusicBot(commands.Cog):
                     seed_song = {'id': vid_id, 'title': cache_map.get(vid_id, 'Unknown'), 'author': 'Unknown'}
                 else:
                     return await ctx.send("❌ Please provide a song name to start the quiz (e.g. `/guess search:manele`).")
+
+        if mode is None:
+            embed = discord.Embed(title="🎮 Guess Game", description="Choose the type of the game you want to play:", color=COLOR_MAIN)
+            if seed_song:
+                embed.set_footer(text=f"Based on: {seed_song['title']}")
+            return await ctx.send(embed=embed, view=GuessModeSelectView(self, ctx, seed_song))
 
         state.game = GuessGame(self, ctx, seed_song=seed_song, mode=mode)
         await state.game.start()
