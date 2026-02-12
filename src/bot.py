@@ -458,7 +458,15 @@ class GuessGame:
         # Show scoreboard
         if self.scores:
             sorted_scores = sorted(self.scores.items(), key=lambda x: x[1], reverse=True)
-            board = "\n".join([f"<@{uid}>: {pts} pts" for uid, pts in sorted_scores])
+            lines = []
+            for uid, pts in sorted_scores:
+                if isinstance(uid, int):
+                    lines.append(f"<@{uid}>: **{pts} pts**")
+                else:
+                    name = uid.replace('web_', '')
+                    lines.append(f"🌐 **{name}**: **{pts} pts**")
+            
+            board = "\n".join(lines)
             embed = discord.Embed(title="🏆 Final Scores", description=board, color=COLOR_MAIN)
             await self.ctx.send(embed=embed)
 

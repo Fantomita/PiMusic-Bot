@@ -518,7 +518,15 @@ async def api_game_status(guild_id):
         
     g = state.game
     # Clean scores for JSON
-    scores = [{'name': cog.bot.get_user(uid).display_name if isinstance(uid, int) else uid.replace('web_', ''), 'score': s} for uid, s in g.scores.items()]
+    scores = []
+    for uid, s in g.scores.items():
+        if isinstance(uid, int):
+            user = cog.bot.get_user(uid)
+            name = user.display_name if user else f"User {uid}"
+        else:
+            name = uid.replace('web_', '')
+        scores.append({'name': name, 'score': s})
+        
     scores.sort(key=lambda x: x['score'], reverse=True)
     
     return jsonify({
