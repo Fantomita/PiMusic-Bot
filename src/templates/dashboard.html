@@ -524,8 +524,12 @@
             </div>
 
             <div class="search-wrap">
-                <input type="text" class="search-input" id="urlInput" placeholder="Paste YouTube URL or search..." onkeypress="handleEnter(event)">
-                <button class="search-btn" onclick="searchSong()">🔍</button>
+                <input type="text" class="search-input" id="urlInput" placeholder="Paste YouTube URL or search..." onkeypress="handleEnter(event)" oninput="handleInput()">
+                <div id="url-buttons" style="position: absolute; right: 10px; top: 10px; bottom: 10px; display: none; gap: 5px;">
+                     <button class="search-btn" style="position: static; width: auto; padding: 0 15px; font-weight:600; font-size: 0.9rem;" onclick="addDirect(document.getElementById('urlInput').value, 'song')">🎵 Song</button>
+                     <button class="search-btn" style="position: static; width: auto; padding: 0 15px; font-weight:600; font-size: 0.9rem; background: #333; color: white;" onclick="addDirect(document.getElementById('urlInput').value, 'playlist')">📜 Playlist</button>
+                </div>
+                <button id="main-search-btn" class="search-btn" onclick="searchSong()">🔍</button>
             </div>
             <div id="loading" class="spinner"></div>
             <div id="search-results"></div>
@@ -927,6 +931,21 @@
             } catch (e) {}
         }
 
+        function handleInput() {
+             const val = document.getElementById('urlInput').value;
+             const isUrl = val.includes('http');
+             const btns = document.getElementById('url-buttons');
+             const mainBtn = document.getElementById('main-search-btn');
+             
+             if (isUrl) {
+                 btns.style.display = 'flex';
+                 mainBtn.style.display = 'none';
+             } else {
+                 btns.style.display = 'none';
+                 mainBtn.style.display = 'flex';
+             }
+        }
+
         async function searchSong() {
             const input = document.getElementById('urlInput');
             const resDiv = document.getElementById('search-results');
@@ -936,7 +955,7 @@
             
             // Direct play logic for URLs
             if (input.value.includes('http')) { 
-                addDirect(input.value); 
+                addDirect(input.value, 'song'); 
                 return; 
             }
 
@@ -982,10 +1001,11 @@
             } 
         }
 
-        async function addDirect(url) {
+        async function addDirect(url, mode='song') {
             document.getElementById('urlInput').value = '';
+            handleInput();
             // Show optimistic feedback if you wanted, but status update will handle it
-            await fetch(`/api/${guild_id}/add`, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({query: url}) });
+            await fetch(`/api/${guild_id}/add`, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({query: url, mode: mode}) });
             fetchStatus();
         }
 
