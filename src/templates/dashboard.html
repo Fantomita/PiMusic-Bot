@@ -736,7 +736,10 @@
         }
 
         async function gameControl(action) {
-            await fetch(`/api/${guild_id}/game/control/${action}`, { method: 'POST' });
+            console.log("Game Control Action:", action);
+            const res = await fetch(`/api/${guild_id}/game/control/${action}`, { method: 'POST' });
+            const data = await res.json();
+            console.log("Game Control Response:", data);
             fetchGameStatus();
         }
 

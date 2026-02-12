@@ -558,12 +558,16 @@ async def api_game_guess(guild_id):
 
 @app.route('/api/<int:guild_id>/game/control/<action>', methods=['POST'])
 async def api_game_web_control(guild_id, action):
+    log_info(f"🕹️ Web Game Control: {action} for guild {guild_id}")
     guild = get_target_guild(guild_id)
     cog = get_bot_cog()
-    if not guild or not cog: return jsonify({'error': 'No guild'}), 400
+    if not guild or not cog: 
+        log_error(f"Web Control Error: Guild {guild_id} or Cog not found")
+        return jsonify({'error': 'No guild'}), 400
     
     state = cog.get_state(guild.id)
     if not state.game or not state.game.active:
+        log_error(f"Web Control Error: No active game for guild {guild.id}")
         return jsonify({'error': 'No active game'}), 400
     
     g = state.game
