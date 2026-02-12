@@ -6,3 +6,4 @@ python-dotenv
 psutil
 PyNaCl
 ytmusicapi
+beautifulsoup4
