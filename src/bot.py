@@ -5,6 +5,7 @@ Optimized for Raspberry Pi / Linux Environments.
 
 import asyncio
 import datetime
+import difflib
 import logging
 import os
 import platform
@@ -71,6 +72,7 @@ class ServerState:
         self.fetching_autoplay = False
         self.stopping = False
         self.last_text_channel = None 
+        self.game = None
 
 class SelectionMenu(ui.Select):
     """Dropdown menu for search results."""
@@ -138,6 +140,151 @@ class MusicControlView(ui.View):
     async def stop_btn(self, interaction, button):
         await self.cog.stop_logic(self.guild_id)
         await interaction.response.send_message("👋 Stopping & Saving...", ephemeral=True, silent=True)
+
+class GuessGameView(ui.View):
+    """Buttons for the Guess the Song game."""
+    def __init__(self, game):
+        super().__init__(timeout=None)
+        self.game = game
+
+    @ui.button(label="+5s", emoji="➕", style=discord.ButtonStyle.blurple)
+    async def more_time(self, interaction, button):
+        if not self.game.active: return
+        await interaction.response.defer()
+        await self.game.play_segment(extra=5)
+
+    @ui.button(label="Skip / Reveal", emoji="⏭️", style=discord.ButtonStyle.gray)
+    async def skip_song(self, interaction, button):
+        if not self.game.active: return
+        self.game.skips.add(interaction.user.id)
+        # One skip is enough for now, or 2 if many people
+        await interaction.response.send_message(f"⏭️ Skipping! It was: **{self.game.current_song['title']}**")
+        await self.game.next_song()
+
+    @ui.button(label="End Game", emoji="🛑", style=discord.ButtonStyle.danger)
+    async def end_game(self, interaction, button):
+        await self.game.stop()
+        await interaction.response.send_message("🛑 Game ended.")
+
+class GuessGame:
+    """Logic for Guess the Song game."""
+    def __init__(self, cog, ctx, songs):
+        self.cog = cog
+        self.ctx = ctx
+        self.songs = songs
+        self.current_song = None
+        self.play_duration = 5
+        self.active = True
+        self.skips = set()
+        self.message = None
+        self.scores = {} # user_id -> points
+
+    async def start(self):
+        # Join VC
+        if not self.ctx.voice_client:
+            if self.ctx.author.voice:
+                try: await self.ctx.author.voice.channel.connect()
+                except: 
+                    self.active = False
+                    return await self.ctx.send("❌ Could not join VC.")
+            else:
+                self.active = False
+                return await self.ctx.send("❌ You must be in a VC!")
+        
+        # Stop existing music
+        if self.ctx.voice_client.is_playing():
+            self.ctx.voice_client.stop()
+        
+        await self.next_song()
+
+    async def next_song(self):
+        if not self.active: return
+        self.current_song = random.choice(self.songs)
+        self.play_duration = 5
+        self.skips = set()
+        
+        embed = discord.Embed(title="🎮 Guess the Song!", description="Listen closely and type the title in chat!\n\n*Hint: Partial titles work!*", color=COLOR_MAIN)
+        embed.add_field(name="Current Difficulty", value=f"Playing {self.play_duration} seconds")
+        
+        if self.message:
+            try: await self.message.delete()
+            except: pass
+            
+        self.message = await self.ctx.send(embed=embed, view=GuessGameView(self))
+        await self.play_segment()
+
+    async def play_segment(self, extra=0):
+        if not self.active or not self.ctx.voice_client: return
+        
+        self.play_duration += extra
+        
+        if self.ctx.voice_client.is_playing():
+            self.ctx.voice_client.stop()
+            await asyncio.sleep(0.5)
+
+        local = os.path.abspath(f"{CACHE_DIR}/{self.current_song['id']}.webm")
+        opts = FFMPEG_LOCAL_OPTS.copy()
+        opts['options'] = f"-vn -threads 2 -bufsize 8192k -t {self.play_duration}"
+        
+        try:
+            source = await discord.FFmpegOpusAudio.from_probe(local, **opts)
+            self.ctx.voice_client.play(source)
+            
+            if extra > 0:
+                embed = discord.Embed(title="🎮 Guess the Song!", description="Playing a longer segment...", color=COLOR_MAIN)
+                embed.add_field(name="Current Difficulty", value=f"Playing {self.play_duration} seconds")
+                await self.message.edit(embed=embed)
+        except Exception as e:
+            log_error(f"Guess Game Play Error: {e}")
+            await self.next_song()
+
+    async def check_guess(self, message):
+        if not self.active or message.channel.id != self.ctx.channel.id: return
+        
+        guess = message.content.lower().strip()
+        if len(guess) < 2: return # Ignore very short messages
+        
+        title = self.current_song['title'].lower().strip()
+        
+        # Clean title for better matching (remove trash)
+        clean_title = re.sub(r'\(.*?\)|\[.*?\]|official|video|audio|lyrics|feat\.|ft\.', '', title).strip()
+        clean_title = re.sub(r'[^a-z0-9\s]', '', clean_title)
+        clean_guess = re.sub(r'[^a-z0-9\s]', '', guess)
+        
+        # Fuzzy matching
+        ratio = difflib.SequenceMatcher(None, clean_guess, clean_title).ratio()
+        
+        # Correct if: close enough, or title contains guess (if guess is long enough), or guess contains title
+        is_correct = ratio > 0.75
+        if not is_correct and len(clean_guess) > 3:
+            if clean_guess in clean_title or clean_title in clean_guess:
+                is_correct = True
+        
+        if is_correct:
+            self.scores[message.author.id] = self.scores.get(message.author.id, 0) + 1
+            await message.add_reaction("✅")
+            
+            # Reveal with original formatting
+            embed = discord.Embed(title="🎉 Correct!", description=f"**{message.author.display_name}** got it!\n\nIt was: **{self.current_song['title']}**", color=discord.Color.green())
+            embed.set_thumbnail(url=f"https://i.ytimg.com/vi/{self.current_song['id']}/mqdefault.jpg")
+            await self.ctx.send(embed=embed)
+            
+            await asyncio.sleep(2)
+            await self.next_song()
+
+    async def stop(self):
+        self.active = False
+        state = self.cog.get_state(self.ctx.guild.id)
+        state.game = None
+        if self.ctx.voice_client and self.ctx.voice_client.is_playing():
+            self.ctx.voice_client.stop()
+        
+        # Show scoreboard
+        if self.scores:
+            sorted_scores = sorted(self.scores.items(), key=lambda x: x[1], reverse=True)
+            board = "\n".join([f"<@{uid}>: {pts} pts" for uid, pts in sorted_scores])
+            embed = discord.Embed(title="🏆 Final Scores", description=board, color=COLOR_MAIN)
+            await self.ctx.send(embed=embed)
 
 class ListPaginator(ui.View):
     """Pagination for queue, history, and cache lists."""
@@ -351,6 +498,13 @@ class MusicBot(commands.Cog):
                 await ctx.send(f"❌ Error: {str(error)[:100]}", silent=True)
             except Exception:
                 pass
+
+    @commands.Cog.listener()
+    async def on_message(self, message):
+        if message.author.bot or not message.guild: return
+        state = self.get_state(message.guild.id)
+        if state.game and state.game.active:
+            await state.game.check_guess(message)
 
     def get_state(self, guild_id):
         if guild_id not in self.states:
@@ -879,6 +1033,25 @@ class MusicBot(commands.Cog):
         if not state.history: return await ctx.send(embed=discord.Embed(description="History empty.", color=COLOR_MAIN), silent=True)
         view = ListPaginator(list(reversed(state.history)), title="History", is_queue=False)
         await ctx.send(embed=view.get_embed(), view=view, silent=True)
+
+    @commands.hybrid_command(name="guess", description="Start a 'Guess the Song' quiz using cached music")
+    async def guess_command(self, ctx):
+        state = self.get_state(ctx.guild.id)
+        if state.game:
+            return await ctx.send("❌ A game is already in progress!", ephemeral=True)
+        
+        # Check cache
+        valid_songs = []
+        for vid_id, title in cache_map.items():
+            if os.path.exists(f"{CACHE_DIR}/{vid_id}.webm"):
+                valid_songs.append({'id': vid_id, 'title': title})
+        
+        if len(valid_songs) < 5:
+            return await ctx.send("❌ Not enough cached songs to start a game (need at least 5 in /cache).")
+        
+        await ctx.defer()
+        state.game = GuessGame(self, ctx, valid_songs)
+        await state.game.start()
 
     @commands.hybrid_command(name="autoplay")
     async def autoplay(self, ctx):
