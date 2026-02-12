@@ -14,6 +14,7 @@ A feature-rich Discord Music Bot featuring a built-in Web Dashboard, local cachi
   - *Non-Blocking I/O:* Cache cleanup and file operations run in background threads to prevent audio stutters on slow storage (SD Cards).
 - **Smart Playlists:** Save your current queue as a playlist or load existing YouTube playlists.
 - **Auto-Play:** Keeps the music going with related track suggestions when the queue ends.
+- **Guess the Song:** Interactive song quiz game with multiple modes (Title, Artist, or Both).
 - **System Stats:** Monitor CPU, RAM, and Temperature (optimized for Raspberry Pi).
 
 ## 🛠️ Installation
@@ -69,15 +70,22 @@ python src/bot.py
 
 ### Discord Commands
 
-- `/play [search or url]` - Play a song or playlist.
-- `/autoplay` - Toggle Auto-Play mode (suggests related songs).
-- `/new` - Regenerate the current Auto-Play suggestion.
-- `/link` - Generate a secure link to the Web Dashboard (now instant!).
-- `/setchannel` - Bind the bot to the current text channel for notifications.
+- `/play [query]` - Play a song or playlist.
+- `/pause` / `/resume` - Pause or resume playback.
+- `/skip` - Skip the current track.
+- `/stop` - Stop music and disconnect.
+- `/autoplay` - Toggle Auto-Play mode.
+- `/new` - Regenerate Auto-Play recommendation.
+- `/link` - Get a secure link to the Web Dashboard.
+- `/setchannel` - Bind the bot to the current text channel.
+- `/guess [search]` - Start an interactive "Guess the Song" quiz.
 - `/queue` - View the current music queue.
+- `/shuffle` - Shuffle the music queue.
+- `/clear` - Clear the current queue.
 - `/history` - View recently played tracks.
 - `/search [query]` - Search for songs with interactive results.
-- `/stop` - Stop the music, save session cache, and disconnect.
+- `/saveplaylist` / `/loadplaylist` - Manage custom playlists.
+- `/listplaylists` / `/delplaylist` - List or delete saved playlists.
 - `/dash` - Monitor system performance and storage stats.
 - `/help` - View all available commands.
 
