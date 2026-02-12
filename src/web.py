@@ -454,8 +454,9 @@ async def api_add(guild_id):
     if not state.last_text_channel:
         state.last_text_channel = guild.text_channels[0]
     
-    # 1. Aggressive clear (before awaits)
-    state.queue = [t for t in state.queue if not (isinstance(t, dict) and t.get('suggested'))]
+    # 1. Safer clear: Only remove the suggestion if it's at the end to make room
+    if state.queue and state.queue[-1].get('suggested'):
+        state.queue.pop()
 
     try:
         # Try to connect if not in VC
@@ -468,8 +469,9 @@ async def api_add(guild_id):
         # Use Flat Options (verified working)
         info = await cog.bot.loop.run_in_executor(None, lambda: yt_dlp.YoutubeDL(YDL_FLAT_OPTS).extract_info(query, download=False))
         
-        # 2. Aggressive clear (after awaits)
-        state.queue = [t for t in state.queue if not (isinstance(t, dict) and t.get('suggested'))]
+        # 2. Safer clear: Re-check after await
+        if state.queue and state.queue[-1].get('suggested'):
+            state.queue.pop()
 
         def process(e): 
             url = e.get('webpage_url') or e.get('url') or f"https://www.youtube.com/watch?v={e['id']}"
