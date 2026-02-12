@@ -160,25 +160,37 @@ async def api_sysinfo():
     except:
         pass
     
-    # Storage
+    # Storage (Music Cache specific)
     try:
         if not os.path.exists(CACHE_DIR):
             os.makedirs(CACHE_DIR, exist_ok=True)
-        storage = shutil.disk_usage(CACHE_DIR)
-        free_gb = storage.free / (1024**3)
-        total_gb = storage.total / (1024**3)
-        storage_percent = (storage.used / storage.total) * 100
+        
+        # Calculate total size of files in cache folder
+        total_used_bytes = 0
+        for f in os.listdir(CACHE_DIR):
+            fp = os.path.join(CACHE_DIR, f)
+            if os.path.isfile(fp):
+                total_used_bytes += os.path.getsize(fp)
+        
+        used_gb = total_used_bytes / (1024**3)
+        from config import MAX_CACHE_SIZE_GB
+        limit_gb = MAX_CACHE_SIZE_GB
+        free_in_cache_gb = max(0, limit_gb - used_gb)
+        storage_percent = (used_gb / limit_gb) * 100 if limit_gb > 0 else 0
+        
+        storage_display_free = free_in_cache_gb
+        storage_display_total = limit_gb
     except Exception:
-        free_gb = 0
-        total_gb = 0
+        storage_display_free = 0
+        storage_display_total = 0
         storage_percent = 0
     
     return jsonify({
         'cpu': cpu_usage,
         'ram': ram_usage,
         'temp': round(temp, 1),
-        'storage_free': round(free_gb, 1),
-        'storage_total': round(total_gb, 1),
+        'storage_free': round(storage_display_free, 1),
+        'storage_total': round(storage_display_total, 1),
         'storage_percent': round(storage_percent, 1)
     })
 
