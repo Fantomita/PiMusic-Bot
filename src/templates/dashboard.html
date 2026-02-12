@@ -536,6 +536,7 @@
             <div class="tabs">
                 <button class="tab-btn active" onclick="switchTab('queue')">Queue <span id="q-count">(0)</span></button>
                 <button class="tab-btn" onclick="switchTab('playlists')">Playlists</button>
+                <button class="tab-btn" id="tab-btn-game" onclick="switchTab('game')" style="display:none; color: var(--primary);">🎮 Game</button>
             </div>
 
             <div id="tab-queue" class="section active">
@@ -552,6 +553,27 @@
                 </div>
                 <div id="playlist-list"></div>
             </div>
+
+            <div id="tab-game" class="section">
+                <div class="pl-tools" style="text-align:center;">
+                    <h2 style="margin:0 0 10px 0; color:var(--primary);">Guess the Song!</h2>
+                    <div id="game-status" style="margin-bottom:15px; color:var(--text-muted);">Waiting for game...</div>
+                    
+                    <div id="game-input-area">
+                        <input type="text" class="pl-input" id="guessInput" placeholder="Type your guess here..." style="margin-bottom:10px; text-align:center; font-size:1.2rem;" onkeypress="handleGuess(event)">
+                        <input type="text" class="pl-input" id="playerName" placeholder="Your Name" style="margin-bottom:10px; width: 50%; display:inline-block;" value="Guest">
+                        <button class="btn-save" onclick="sendGuess()" style="width: auto; padding: 12px 30px;">🚀 Guess</button>
+                    </div>
+                    <div id="guess-feedback" style="height: 20px; margin-top: 10px; font-weight: bold;"></div>
+                </div>
+
+                <div class="stats-grid" style="grid-template-columns: 1fr;">
+                    <div class="stat-card" style="text-align: left; padding: 20px;">
+                        <div class="stat-label" style="margin-bottom: 10px; font-size: 0.9rem;">🏆 LEADERBOARD</div>
+                        <div id="game-scores"></div>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -560,16 +582,21 @@
         const guild_id = "{{ guild_id }}";
         let currentTab = 'queue';
         let lastStatus = null;
+        let gameActive = false;
 
         function switchTab(tab) {
             currentTab = tab;
             document.querySelectorAll('.section').forEach(el => el.classList.remove('active'));
             document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
             document.getElementById('tab-' + tab).classList.add('active');
-            event.target.classList.add('active');
+            
+            // Handle tab button active state manually because of the ID selector
+            if(tab === 'game') document.getElementById('tab-btn-game').classList.add('active');
+            else event.target.classList.add('active');
         }
 
         function handleEnter(e) { if(e.key === 'Enter') searchSong(); }
+        function handleGuess(e) { if(e.key === 'Enter') sendGuess(); }
 
         async function fetchStatus() {
             try {
@@ -641,7 +668,96 @@
                     }
                 }
 
+                // Check Game Status
+                fetchGameStatus();
+
             } catch (e) { document.getElementById('status-badge').classList.remove('online'); }
+        }
+
+        async function fetchGameStatus() {
+            try {
+                const res = await fetch(`/api/${guild_id}/game/status`);
+                const data = await res.json();
+                
+                const gameBtn = document.getElementById('tab-btn-game');
+                
+                if (data.active) {
+                    gameBtn.style.display = 'block';
+                    if (!gameActive) {
+                        gameBtn.style.animation = 'pulse 1s infinite';
+                    }
+                    gameActive = true;
+                    
+                    document.getElementById('game-status').innerText = `Mode: Guess the ${data.mode.toUpperCase()} | Playing: ${data.round_duration}s`;
+                    
+                    const scoreList = document.getElementById('game-scores');
+                    scoreList.innerHTML = '';
+                    if (data.scores.length === 0) {
+                        scoreList.innerHTML = '<div style="color:var(--text-muted);">No scores yet!</div>';
+                    } else {
+                        data.scores.forEach((s, i) => {
+                            const row = document.createElement('div');
+                            row.style.display = 'flex';
+                            row.style.justifyContent = 'space-between';
+                            row.style.padding = '8px';
+                            row.style.borderBottom = '1px solid var(--border)';
+                            row.innerHTML = `<span>${i+1}. ${s.name}</span> <span style="font-weight:bold; color:var(--primary);">${s.score} pts</span>`;
+                            scoreList.appendChild(row);
+                        });
+                    }
+
+                    if(data.transitioning) {
+                         document.getElementById('guess-feedback').innerText = "🎉 Correct! Next song coming...";
+                         document.getElementById('guess-feedback').style.color = "#2ecc71";
+                         document.getElementById('guessInput').disabled = true;
+                    } else {
+                         if(document.getElementById('guessInput').disabled) {
+                             document.getElementById('guessInput').disabled = false;
+                             document.getElementById('guessInput').value = '';
+                             document.getElementById('guess-feedback').innerText = "";
+                             document.getElementById('guessInput').focus();
+                         }
+                    }
+
+                } else {
+                    gameBtn.style.display = 'none';
+                    gameActive = false;
+                    if(currentTab === 'game') switchTab('queue');
+                }
+            } catch (e) {}
+        }
+
+        async function sendGuess() {
+            const input = document.getElementById('guessInput');
+            const nameInput = document.getElementById('playerName');
+            const feedback = document.getElementById('guess-feedback');
+            
+            const guess = input.value.trim();
+            const name = nameInput.value.trim() || 'Guest';
+            
+            if (!guess) return;
+            
+            input.value = '';
+            
+            try {
+                const res = await fetch(`/api/${guild_id}/game/guess`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ guess: guess, name: name })
+                });
+                const data = await res.json();
+                
+                if (data.correct) {
+                    feedback.innerText = "✅ Correct!";
+                    feedback.style.color = "#2ecc71";
+                } else {
+                    feedback.innerText = "❌ Nope!";
+                    feedback.style.color = "var(--danger)";
+                    setTimeout(() => { if(feedback.innerText.includes("Nope")) feedback.innerText = ""; }, 1500);
+                }
+            } catch (e) {
+                console.error(e);
+            }
         }
 
         async function fetchPlaylists() {

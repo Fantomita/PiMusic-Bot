@@ -505,3 +505,45 @@ async def api_add(guild_id):
         return jsonify({'status':'ok'})
     except Exception:
         return jsonify({'error':'fail'}), 500
+
+@app.route('/api/<int:guild_id>/game/status')
+async def api_game_status(guild_id):
+    guild = get_target_guild(guild_id)
+    cog = get_bot_cog()
+    if not guild or not cog: return jsonify({'active': False})
+    
+    state = cog.get_state(guild.id)
+    if not state.game or not state.game.active:
+        return jsonify({'active': False})
+        
+    g = state.game
+    # Clean scores for JSON
+    scores = [{'name': cog.bot.get_user(uid).display_name if isinstance(uid, int) else uid.replace('web_', ''), 'score': s} for uid, s in g.scores.items()]
+    scores.sort(key=lambda x: x['score'], reverse=True)
+    
+    return jsonify({
+        'active': True,
+        'mode': g.mode,
+        'round_duration': g.play_duration,
+        'scores': scores,
+        'transitioning': g.transitioning
+    })
+
+@app.route('/api/<int:guild_id>/game/guess', methods=['POST'])
+async def api_game_guess(guild_id):
+    data = await request.get_json()
+    guess = data.get('guess', '').strip()
+    name = data.get('name', 'WebUser').strip()
+    
+    if not guess: return jsonify({'error': 'Empty guess'}), 400
+    
+    guild = get_target_guild(guild_id)
+    cog = get_bot_cog()
+    if not guild or not cog: return jsonify({'error': 'No guild'}), 400
+    
+    state = cog.get_state(guild.id)
+    if not state.game or not state.game.active:
+        return jsonify({'error': 'No active game'}), 400
+        
+    result = await state.game.process_web_guess(name, guess)
+    return jsonify({'correct': result})

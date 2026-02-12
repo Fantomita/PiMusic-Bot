@@ -385,40 +385,34 @@ class GuessGame:
         text = " ".join(text.split())
         return text
 
-    async def check_guess(self, message):
-        if not self.active or message.channel.id != self.ctx.channel.id or self.processing_guess or self.transitioning: return
-        
-        raw_guess = message.content.strip()
-        if len(raw_guess) < 2: return 
+    async def validate_guess(self, raw_guess):
+        """Core logic to check if a guess is correct."""
+        if not self.active or self.processing_guess or self.transitioning: return False
+
+        clean_guess = self.clean_text(raw_guess)
+        if len(clean_guess) < 2: return False
         
         if self.mode == "both":
-            # For 'both' mode, we need both author and title in the guess
             target_author = self.clean_text(self.current_song['author'])
             target_title = self.clean_text(self.current_song['title'])
-            clean_guess = self.clean_text(raw_guess)
             
-            # Use ratio for fuzzy matching both parts
-            # Check if guess contains parts of both
             author_match = difflib.SequenceMatcher(None, clean_guess, target_author).ratio() > 0.6 or target_author in clean_guess
             title_match = difflib.SequenceMatcher(None, clean_guess, target_title).ratio() > 0.6 or target_title in clean_guess
             
-            if author_match and title_match:
-                await message.add_reaction("✅")
-                await self.trigger_transition(winner=message.author)
-            return
+            return author_match and title_match
 
         target_text = self.current_song['title'] if self.mode == "title" else self.current_song['author']
-        
         clean_target = self.clean_text(target_text)
-        clean_guess = self.clean_text(raw_guess)
         
+        # Anti-author check for title mode (prevent guessing artist when title is needed)
         if self.mode == "title":
             clean_author = self.clean_text(self.current_song['author'])
             author_ratio = difflib.SequenceMatcher(None, clean_guess, clean_author).ratio()
             if author_ratio > 0.85:
+                # If guess matches author too well, check if it ALSO matches title
                 title_ratio = difflib.SequenceMatcher(None, clean_guess, clean_target).ratio()
                 if title_ratio < 0.7:
-                    return 
+                    return False
 
         ratio = difflib.SequenceMatcher(None, clean_guess, clean_target).ratio()
         is_correct = ratio > 0.8
@@ -426,9 +420,28 @@ class GuessGame:
             if clean_guess in clean_target or clean_target in clean_guess:
                 is_correct = True
         
-        if is_correct:
+        return is_correct
+
+    async def check_guess(self, message):
+        """Discord message handler for guesses."""
+        if not self.active or message.channel.id != self.ctx.channel.id: return
+        
+        if await self.validate_guess(message.content):
             await message.add_reaction("✅")
             await self.trigger_transition(winner=message.author)
+
+    async def process_web_guess(self, user_name, guess_text):
+        """Web handler for guesses."""
+        if await self.validate_guess(guess_text):
+            # Create a dummy user object for the winner
+            class WebUser:
+                def __init__(self, name):
+                    self.id = f"web_{name}"
+                    self.display_name = f"{name} (Web)"
+            
+            await self.trigger_transition(winner=WebUser(user_name))
+            return True
+        return False
 
     async def stop(self):
         self.active = False
