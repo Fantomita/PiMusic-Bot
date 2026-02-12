@@ -18,10 +18,10 @@ COLOR_MAIN = 0xFFD700  # Gold
 # FFmpeg Options
 FFMPEG_STREAM_OPTS = {
     'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5 -nostdin',
-    'options': '-vn -threads 2 -bufsize 8192k'
+    'options': '-vn -threads 2 -bufsize 2048k'
 }
 FFMPEG_LOCAL_OPTS = {
-    'options': '-vn -threads 2 -bufsize 8192k'
+    'options': '-vn -threads 2 -bufsize 2048k'
 }
 
 # yt-dlp Options

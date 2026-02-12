@@ -142,6 +142,16 @@ async def dashboard(guild_id):
     name = cog.bot.user.name if cog.bot.user else "MusicBot"
     return await render_template('dashboard.html', bot_name=name, guild_id=guild_id)
 
+import time
+
+# ... imports ...
+
+# Cache for sysinfo to reduce SD card IO
+_sysinfo_cache = {
+    'storage_bytes': 0,
+    'last_update': 0
+}
+
 @app.route('/api/sysinfo')
 async def api_sysinfo():
     # CPU Usage
@@ -160,17 +170,26 @@ async def api_sysinfo():
     except:
         pass
     
-    # Storage (Music Cache specific)
+    # Storage (Music Cache specific) - Cached 60s
+    global _sysinfo_cache
+    current_time = time.time()
+    
     try:
-        if not os.path.exists(CACHE_DIR):
-            os.makedirs(CACHE_DIR, exist_ok=True)
-        
-        # Calculate total size of files in cache folder
-        total_used_bytes = 0
-        for f in os.listdir(CACHE_DIR):
-            fp = os.path.join(CACHE_DIR, f)
-            if os.path.isfile(fp):
-                total_used_bytes += os.path.getsize(fp)
+        if current_time - _sysinfo_cache['last_update'] > 60:
+            if not os.path.exists(CACHE_DIR):
+                os.makedirs(CACHE_DIR, exist_ok=True)
+            
+            # Calculate total size of files in cache folder
+            total_used_bytes = 0
+            for f in os.listdir(CACHE_DIR):
+                fp = os.path.join(CACHE_DIR, f)
+                if os.path.isfile(fp):
+                    total_used_bytes += os.path.getsize(fp)
+            
+            _sysinfo_cache['storage_bytes'] = total_used_bytes
+            _sysinfo_cache['last_update'] = current_time
+            
+        total_used_bytes = _sysinfo_cache['storage_bytes']
         
         used_gb = total_used_bytes / (1024**3)
         from config import MAX_CACHE_SIZE_GB

@@ -385,7 +385,7 @@ class GuessGame:
                 # Use flat opts to get info quickly
                 info = await self.cog.bot.loop.run_in_executor(None, lambda: yt_dlp.YoutubeDL(YDL_PLAY_OPTS).extract_info(self.current_song['id'], download=False))
                 opts = FFMPEG_STREAM_OPTS.copy()
-                opts['options'] = f"-vn -threads 2 -bufsize 8192k -t {self.play_duration}"
+                opts['options'] = f"-vn -threads 2 -bufsize 1024k -t {self.play_duration}"
                 
                 # Final check before playing
                 if self.transitioning or not self.active: return
