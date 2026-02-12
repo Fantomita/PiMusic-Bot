@@ -1228,17 +1228,19 @@ class MusicBot(commands.Cog):
         
         await ctx.defer()
         
+        # This logic is now shared
+        await self.start_game_logic(ctx.guild.id, search, ctx=ctx)
+
+    async def start_game_logic(self, guild_id, search=None, mode=None, ctx=None):
+        """Shared logic to initialize and start a guess game."""
+        state = self.get_state(guild_id)
+        
         seed_song = None
         if search:
-            # Search for the seed song
             try:
                 q = search if re.match(r'^https?://', search) else f"ytsearch1:{search}"
                 info = await self.bot.loop.run_in_executor(None, lambda: yt_dlp.YoutubeDL(YDL_FLAT_OPTS).extract_info(q, download=False))
-                if 'entries' in info:
-                    e = info['entries'][0]
-                else:
-                    e = info
-                
+                e = info['entries'][0] if 'entries' in info else info
                 seed_song = {
                     'id': e['id'], 
                     'title': e['title'], 
@@ -1246,9 +1248,10 @@ class MusicBot(commands.Cog):
                     'url': f"https://www.youtube.com/watch?v={e['id']}"
                 }
             except Exception as e:
-                return await ctx.send(f"❌ Could not find seed song: {e}")
+                msg = f"❌ Could not find seed song: {e}"
+                if ctx: await ctx.send(msg)
+                return False, msg
         else:
-            # Fallback to current track or a random cached song
             if state.current_track:
                 seed_song = state.current_track
             else:
@@ -1257,13 +1260,37 @@ class MusicBot(commands.Cog):
                     vid_id = random.choice(valid_cached)
                     seed_song = {'id': vid_id, 'title': cache_map.get(vid_id, 'Unknown'), 'author': 'Unknown'}
                 else:
-                    return await ctx.send("❌ Please provide a song name to start the quiz (e.g. `/guess manele`).")
+                    msg = "❌ Please provide a song name to start the quiz."
+                    if ctx: await ctx.send(msg)
+                    return False, msg
 
-        embed = discord.Embed(title="🎮 Guess Game", description="Choose the type of the game you want to play:", color=COLOR_MAIN)
-        if seed_song:
-            embed.set_footer(text=f"Based on: {seed_song['title']}")
-        
-        await ctx.send(embed=embed, view=GuessModeSelectView(self, ctx, seed_song))
+        if mode is None:
+            # If no mode, we must be in Discord to show the selection view, 
+            # or the web will have its own selection.
+            if ctx:
+                embed = discord.Embed(title="🎮 Guess Game", description="Choose the type of the game you want to play:", color=COLOR_MAIN)
+                if seed_song: embed.set_footer(text=f"Based on: {seed_song['title']}")
+                await ctx.send(embed=embed, view=GuessModeSelectView(self, ctx, seed_song))
+                return True, "Selection sent"
+            else:
+                return False, "Mode required for direct start"
+
+        # Direct start (usually from Web)
+        state.game = GuessGame(self, ctx or type('DummyCtx', (), {'guild': self.bot.get_guild(guild_id), 'voice_client': self.bot.get_guild(guild_id).voice_client, 'channel': None, 'send': lambda m, **k: asyncio.sleep(0)})(), seed_song=seed_song, mode=mode)
+        # Handle the case where ctx is missing but we need it for sending game messages
+        if not ctx:
+            # Find a text channel to send game messages to
+            target_channel = state.last_text_channel or self.bot.get_guild(guild_id).text_channels[0]
+            state.game.ctx = type('WebCtx', (), {
+                'guild': self.bot.get_guild(guild_id),
+                'voice_client': self.bot.get_guild(guild_id).voice_client,
+                'channel': target_channel,
+                'author': self.bot.user,
+                'send': lambda *args, **kwargs: target_channel.send(*args, **kwargs)
+            })()
+
+        await state.game.start()
+        return True, "Game started"
 
     @commands.hybrid_command(name="autoplay")
     async def autoplay(self, ctx):

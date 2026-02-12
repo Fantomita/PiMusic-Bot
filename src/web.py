@@ -556,6 +556,22 @@ async def api_game_guess(guild_id):
     result = await state.game.process_web_guess(name, guess)
     return jsonify({'correct': result})
 
+@app.route('/api/<int:guild_id>/game/start', methods=['POST'])
+async def api_game_start(guild_id):
+    data = await request.get_json()
+    search = data.get('search', '').strip() or None
+    mode = data.get('mode', 'title').strip()
+    
+    guild = get_target_guild(guild_id)
+    cog = get_bot_cog()
+    if not guild or not cog: return jsonify({'error': 'No guild'}), 400
+    
+    success, message = await cog.start_game_logic(guild.id, search=search, mode=mode)
+    if success:
+        return jsonify({'status': 'ok'})
+    else:
+        return jsonify({'error': message}), 400
+
 @app.route('/api/<int:guild_id>/game/control/<action>', methods=['POST'])
 async def api_game_web_control(guild_id, action):
     log_info(f"🕹️ Web Game Control: {action} for guild {guild_id}")

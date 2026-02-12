@@ -536,7 +536,7 @@
             <div class="tabs">
                 <button class="tab-btn active" onclick="switchTab('queue')">Queue <span id="q-count">(0)</span></button>
                 <button class="tab-btn" onclick="switchTab('playlists')">Playlists</button>
-                <button class="tab-btn" id="tab-btn-game" onclick="switchTab('game')" style="display:none; color: var(--primary);">🎮 Game</button>
+                <button class="tab-btn" id="tab-btn-game" onclick="switchTab('game')">🎮 Game</button>
             </div>
 
             <div id="tab-queue" class="section active">
@@ -555,30 +555,47 @@
             </div>
 
             <div id="tab-game" class="section">
-                <div class="pl-tools" style="text-align:center;">
-                    <h2 style="margin:0 0 10px 0; color:var(--primary);">Guess the Song!</h2>
-                    <div id="game-status" style="margin-bottom:15px; color:var(--text-muted);">Waiting for game...</div>
-                    
-                    <div id="game-input-area">
-                        <input type="text" class="pl-input" id="guessInput" placeholder="Type your guess here..." style="margin-bottom:10px; text-align:center; font-size:1.2rem;" onkeypress="handleGuess(event)">
-                        <input type="text" class="pl-input" id="playerName" placeholder="Your Name" style="margin-bottom:10px; width: 50%; display:inline-block;" value="Guest">
-                        <button class="btn-save" onclick="sendGuess()" style="width: auto; padding: 12px 30px; margin-bottom: 20px;">🚀 Guess</button>
-                    </div>
-                    
-                    <div class="controls" style="margin-bottom: 20px;">
-                        <button class="btn-ctrl" onclick="gameControl('more_time')" title="+5 Seconds">➕</button>
-                        <button class="btn-ctrl" onclick="gameControl('rehear')" title="Rehear">👂</button>
-                        <button class="btn-ctrl" onclick="gameControl('skip')" title="Skip / Reveal">⏭️</button>
-                        <button class="btn-ctrl" onclick="gameControl('stop')" title="End Game" style="color: var(--danger);">🛑</button>
+                <!-- UI when game is active -->
+                <div id="game-active-ui" style="display:none;">
+                    <div class="pl-tools" style="text-align:center;">
+                        <h2 style="margin:0 0 10px 0; color:var(--primary);">Guess the Song!</h2>
+                        <div id="game-status" style="margin-bottom:15px; color:var(--text-muted);">Waiting for game...</div>
+                        
+                        <div id="game-input-area">
+                            <input type="text" class="pl-input" id="guessInput" placeholder="Type your guess here..." style="margin-bottom:10px; text-align:center; font-size:1.2rem;" onkeypress="handleGuess(event)">
+                            <input type="text" class="pl-input" id="playerName" placeholder="Your Name" style="margin-bottom:10px; width: 50%; display:inline-block;" value="Guest">
+                            <button class="btn-save" onclick="sendGuess()" style="width: auto; padding: 12px 30px; margin-bottom: 20px;">🚀 Guess</button>
+                        </div>
+                        
+                        <div class="controls" style="margin-bottom: 20px;">
+                            <button class="btn-ctrl" onclick="gameControl('more_time')" title="+5 Seconds">➕</button>
+                            <button class="btn-ctrl" onclick="gameControl('rehear')" title="Rehear">👂</button>
+                            <button class="btn-ctrl" onclick="gameControl('skip')" title="Skip / Reveal">⏭️</button>
+                            <button class="btn-ctrl" onclick="gameControl('stop')" title="End Game" style="color: var(--danger);">🛑</button>
+                        </div>
+
+                        <div id="guess-feedback" style="height: 20px; margin-top: 10px; font-weight: bold;"></div>
                     </div>
 
-                    <div id="guess-feedback" style="height: 20px; margin-top: 10px; font-weight: bold;"></div>
+                    <div class="stats-grid" style="grid-template-columns: 1fr;">
+                        <div class="stat-card" style="text-align: left; padding: 20px;">
+                            <div class="stat-label" style="margin-bottom: 10px; font-size: 0.9rem;">🏆 LEADERBOARD</div>
+                            <div id="game-scores"></div>
+                        </div>
+                    </div>
                 </div>
 
-                <div class="stats-grid" style="grid-template-columns: 1fr;">
-                    <div class="stat-card" style="text-align: left; padding: 20px;">
-                        <div class="stat-label" style="margin-bottom: 10px; font-size: 0.9rem;">🏆 LEADERBOARD</div>
-                        <div id="game-scores"></div>
+                <!-- UI when no game is active -->
+                <div id="game-start-ui">
+                    <div class="pl-tools" style="text-align:center;">
+                        <h2 style="margin:0 0 20px 0; color:var(--primary);">Start a New Game</h2>
+                        <input type="text" class="pl-input" id="gameSearch" placeholder="Seed Song (Optional, e.g. manele)" style="margin-bottom:15px; text-align:center;">
+                        <div style="display:grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-bottom: 20px;">
+                            <button class="btn-save" style="padding:15px 5px; font-size:0.8rem;" onclick="startGame('title')">🎵 Title</button>
+                            <button class="btn-save" style="padding:15px 5px; font-size:0.8rem;" onclick="startGame('author')">🎤 Artist</button>
+                            <button class="btn-save" style="padding:15px 5px; font-size:0.8rem;" onclick="startGame('both')">📀 Both</button>
+                        </div>
+                        <p style="color:var(--text-muted); font-size:0.9rem;">The bot will join your current voice channel.</p>
                     </div>
                 </div>
             </div>
@@ -688,9 +705,14 @@
                 const data = await res.json();
                 
                 const gameBtn = document.getElementById('tab-btn-game');
+                const activeUI = document.getElementById('game-active-ui');
+                const startUI = document.getElementById('game-start-ui');
                 
                 if (data.active) {
-                    gameBtn.style.display = 'block';
+                    activeUI.style.display = 'block';
+                    startUI.style.display = 'none';
+                    gameBtn.style.color = 'var(--primary)';
+                    
                     if (!gameActive) {
                         gameBtn.style.animation = 'pulse 1s infinite';
                     }
@@ -728,11 +750,24 @@
                     }
 
                 } else {
-                    gameBtn.style.display = 'none';
+                    activeUI.style.display = 'none';
+                    startUI.style.display = 'block';
+                    gameBtn.style.color = 'var(--text-muted)';
                     gameActive = false;
-                    if(currentTab === 'game') switchTab('queue');
                 }
             } catch (e) {}
+        }
+
+        async function startGame(mode) {
+            const search = document.getElementById('gameSearch').value;
+            const res = await fetch(`/api/${guild_id}/game/start`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ search: search, mode: mode })
+            });
+            const data = await res.json();
+            if (data.error) alert(data.error);
+            else fetchGameStatus();
         }
 
         async function gameControl(action) {
@@ -766,6 +801,7 @@
                 if (data.correct) {
                     feedback.innerText = "✅ Correct!";
                     feedback.style.color = "#2ecc71";
+                    fetchGameStatus(); // Immediate sync
                 } else {
                     feedback.innerText = "❌ Nope!";
                     feedback.style.color = "var(--danger)";
@@ -919,7 +955,7 @@
             } catch (e) {}
         }
 
-        setInterval(fetchStatus, 2000);
+        setInterval(fetchStatus, 1000); // Faster sync (1s)
         setInterval(fetchSysInfo, 5000);
         fetchStatus();
         fetchSysInfo();
