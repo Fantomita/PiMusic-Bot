@@ -547,3 +547,25 @@ async def api_game_guess(guild_id):
         
     result = await state.game.process_web_guess(name, guess)
     return jsonify({'correct': result})
+
+@app.route('/api/<int:guild_id>/game/control/<action>', methods=['POST'])
+async def api_game_web_control(guild_id, action):
+    guild = get_target_guild(guild_id)
+    cog = get_bot_cog()
+    if not guild or not cog: return jsonify({'error': 'No guild'}), 400
+    
+    state = cog.get_state(guild.id)
+    if not state.game or not state.game.active:
+        return jsonify({'error': 'No active game'}), 400
+    
+    g = state.game
+    if action == 'more_time':
+        if not g.transitioning: await g.play_segment(extra=5)
+    elif action == 'rehear':
+        if not g.transitioning: await g.play_segment(extra=0)
+    elif action == 'skip':
+        await g.trigger_transition(reveal=True)
+    elif action == 'stop':
+        await g.stop()
+        
+    return jsonify({'status': 'ok'})

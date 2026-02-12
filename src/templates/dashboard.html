@@ -562,8 +562,16 @@
                     <div id="game-input-area">
                         <input type="text" class="pl-input" id="guessInput" placeholder="Type your guess here..." style="margin-bottom:10px; text-align:center; font-size:1.2rem;" onkeypress="handleGuess(event)">
                         <input type="text" class="pl-input" id="playerName" placeholder="Your Name" style="margin-bottom:10px; width: 50%; display:inline-block;" value="Guest">
-                        <button class="btn-save" onclick="sendGuess()" style="width: auto; padding: 12px 30px;">🚀 Guess</button>
+                        <button class="btn-save" onclick="sendGuess()" style="width: auto; padding: 12px 30px; margin-bottom: 20px;">🚀 Guess</button>
                     </div>
+                    
+                    <div class="controls" style="margin-bottom: 20px;">
+                        <button class="btn-ctrl" onclick="gameControl('more_time')" title="+5 Seconds">➕</button>
+                        <button class="btn-ctrl" onclick="gameControl('rehear')" title="Rehear">👂</button>
+                        <button class="btn-ctrl" onclick="gameControl('skip')" title="Skip / Reveal">⏭️</button>
+                        <button class="btn-ctrl" onclick="gameControl('stop')" title="End Game" style="color: var(--danger);">🛑</button>
+                    </div>
+
                     <div id="guess-feedback" style="height: 20px; margin-top: 10px; font-weight: bold;"></div>
                 </div>
 
@@ -725,6 +733,11 @@
                     if(currentTab === 'game') switchTab('queue');
                 }
             } catch (e) {}
+        }
+
+        async function gameControl(action) {
+            await fetch(`/api/${guild_id}/game/control/${action}`, { method: 'POST' });
+            fetchGameStatus();
         }
 
         async function sendGuess() {

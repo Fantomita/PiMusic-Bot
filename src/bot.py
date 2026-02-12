@@ -343,35 +343,40 @@ class GuessGame:
 
     async def play_segment(self, extra=0):
         if not self.active or not self.ctx.voice_client or self.transitioning: return
-        self.play_duration += extra
         
-        if self.ctx.voice_client.is_playing() and extra == 0:
-            return
-
-        if self.ctx.voice_client.is_playing():
-            self.ctx.voice_client.stop()
-            await asyncio.sleep(0.3)
-
-        try:
-            info = await self.cog.bot.loop.run_in_executor(None, lambda: yt_dlp.YoutubeDL(YDL_PLAY_OPTS).extract_info(self.current_song['id'], download=False))
-            opts = FFMPEG_STREAM_OPTS.copy()
-            opts['options'] = f"-vn -threads 2 -bufsize 8192k -t {self.play_duration}"
+        async with self.lock:
+            self.play_duration += extra
             
-            # Double check we haven't transitioned while fetching info
-            if self.transitioning or not self.active: return
+            if self.ctx.voice_client.is_playing() and extra == 0:
+                return
 
-            source = await discord.FFmpegOpusAudio.from_probe(info['url'], **opts)
-            self.ctx.voice_client.play(source)
-            
-            if extra > 0:
-                target_type = "Title" if self.mode == "title" else "Artist"
-                embed = discord.Embed(title=f"🎮 Guess the {target_type}!", description="Playing a longer segment...", color=COLOR_MAIN)
-                embed.add_field(name="Difficulty", value=f"Playing {self.play_duration}s")
-                await self.message.edit(embed=embed)
-        except Exception as e:
-            log_error(f"Guess Game Play Error: {e}")
-            if self.active and not self.transitioning:
-                await self.next_song()
+            if self.ctx.voice_client.is_playing():
+                self.ctx.voice_client.stop()
+                await asyncio.sleep(0.3)
+
+            try:
+                # Use flat opts to get info quickly
+                info = await self.cog.bot.loop.run_in_executor(None, lambda: yt_dlp.YoutubeDL(YDL_PLAY_OPTS).extract_info(self.current_song['id'], download=False))
+                opts = FFMPEG_STREAM_OPTS.copy()
+                opts['options'] = f"-vn -threads 2 -bufsize 8192k -t {self.play_duration}"
+                
+                # Final check before playing
+                if self.transitioning or not self.active: return
+
+                source = await discord.FFmpegOpusAudio.from_probe(info['url'], **opts)
+                self.ctx.voice_client.play(source)
+                
+                if extra > 0 or True: # Always update if called
+                    target_type = "Title" if self.mode == "title" else "Artist"
+                    embed = discord.Embed(title=f"🎮 Guess the {target_type}!", description="Playing audio segment...", color=COLOR_MAIN)
+                    embed.add_field(name="Difficulty", value=f"Playing {self.play_duration}s")
+                    if self.message:
+                        try: await self.message.edit(embed=embed)
+                        except: pass
+            except Exception as e:
+                log_error(f"Guess Game Play Error: {e}")
+                if self.active and not self.transitioning:
+                    await self.next_song()
 
     def clean_text(self, text):
         """Standardizes text for comparison."""
