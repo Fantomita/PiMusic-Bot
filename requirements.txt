@@ -7,3 +7,4 @@ psutil
 PyNaCl
 ytmusicapi
 beautifulsoup4
+googlesearch-python
