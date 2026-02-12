@@ -8,6 +8,7 @@ import datetime
 import difflib
 import logging
 import os
+import unicodedata
 import platform
 import random
 import re
@@ -162,9 +163,8 @@ class GuessGameView(ui.View):
     @ui.button(label="Skip / Reveal", emoji="⏭️", style=discord.ButtonStyle.gray)
     async def skip_song(self, interaction, button):
         if not self.game.active: return
-        self.game.skips.add(interaction.user.id)
-        # One skip is enough for now, or 2 if many people
-        await interaction.response.send_message(f"⏭️ Skipping! It was: **{self.game.current_song['title']}**")
+        target = self.game.current_song['title'] if self.game.mode == "title" else self.game.current_song['author']
+        await interaction.response.send_message(f"⏭️ Skipping! It was: **{target}** (by {self.game.current_song['author']})")
         await self.game.next_song()
 
     @ui.button(label="End Game", emoji="🛑", style=discord.ButtonStyle.danger)
@@ -174,10 +174,12 @@ class GuessGameView(ui.View):
 
 class GuessGame:
     """Logic for Guess the Song game."""
-    def __init__(self, cog, ctx, songs):
+    def __init__(self, cog, ctx, seed_song=None, mode="title"):
         self.cog = cog
         self.ctx = ctx
-        self.songs = songs
+        self.seed_song = seed_song
+        self.mode = mode # "title" or "author"
+        self.songs_pool = []
         self.current_song = None
         self.play_duration = 5
         self.active = True
@@ -186,6 +188,36 @@ class GuessGame:
         self.scores = {} # user_id -> points
         self.processing_guess = False
         self.lock = asyncio.Lock()
+        self.played_ids = set()
+
+    def remove_diacritics(self, text):
+        """Removes Romanian diacritics and other accents."""
+        return "".join(c for c in unicodedata.normalize('NFD', text) if unicodedata.category(c) != 'Mn')
+
+    async def fetch_more_songs(self):
+        """Uses autoplay logic to find related songs for the game."""
+        seed = self.seed_song
+        if not seed and self.played_ids:
+            # Pick a random one we already played to get more variety
+            # (In a real scenario we'd track more, but let's keep it simple)
+            pass
+
+        try:
+            url = f"https://www.youtube.com/watch?v={seed['id']}&list=RD{seed['id']}"
+            info = await self.cog.bot.loop.run_in_executor(None, lambda: yt_dlp.YoutubeDL(YDL_MIX_OPTS).extract_info(url, download=False))
+            if 'entries' in info:
+                new_entries = [e for e in info['entries'] if e and e['id'] not in self.played_ids]
+                for e in new_entries:
+                    track = {
+                        'id': e['id'], 
+                        'title': e['title'], 
+                        'author': e.get('uploader', 'Unknown'),
+                        'url': e.get('url') or f"https://www.youtube.com/watch?v={e['id']}"
+                    }
+                    self.songs_pool.append(track)
+                random.shuffle(self.songs_pool)
+        except Exception as e:
+            log_error(f"Guess Game pool fetch failed: {e}")
 
     async def start(self):
         # Join VC
@@ -199,22 +231,33 @@ class GuessGame:
                 self.active = False
                 return await self.ctx.send("❌ You must be in a VC!")
         
-        # Stop existing music
         if self.ctx.voice_client.is_playing():
             self.ctx.voice_client.stop()
         
+        await self.ctx.send(f"🎮 Starting **Guess the {self.mode.capitalize()}** game based on: **{self.seed_song['title']}**")
         await self.next_song()
 
     async def next_song(self):
         async with self.lock:
             if not self.active: return
-            self.current_song = random.choice(self.songs)
+            
+            # Refill pool if empty
+            if not self.songs_pool:
+                await self.ctx.send("🔄 Fetching more songs...")
+                await self.fetch_more_songs()
+            
+            if not self.songs_pool:
+                await self.ctx.send("❌ Could not find enough songs. Ending game.")
+                return await self.stop()
+
+            self.current_song = self.songs_pool.pop(0)
+            self.played_ids.add(self.current_song['id'])
             self.play_duration = 5
-            self.skips = set()
             self.processing_guess = False
             
-            embed = discord.Embed(title="🎮 Guess the Song!", description="Listen closely and type the title in chat!\n\n*Hint: Partial titles work!*", color=COLOR_MAIN)
-            embed.add_field(name="Current Difficulty", value=f"Playing {self.play_duration} seconds")
+            target_type = "Title" if self.mode == "title" else "Artist/Author"
+            embed = discord.Embed(title=f"🎮 Guess the {target_type}!", description=f"Listen and type the **{target_type.lower()}**!\n\n*Romanian diacritics are optional.*", color=COLOR_MAIN)
+            embed.add_field(name="Difficulty", value=f"Playing {self.play_duration}s")
             
             if self.message:
                 try: await self.message.delete()
@@ -225,10 +268,8 @@ class GuessGame:
 
     async def play_segment(self, extra=0):
         if not self.active or not self.ctx.voice_client: return
-        
         self.play_duration += extra
         
-        # If already playing and it's a rehear (extra=0), don't restart unless needed
         if self.ctx.voice_client.is_playing() and extra == 0:
             return
 
@@ -236,48 +277,72 @@ class GuessGame:
             self.ctx.voice_client.stop()
             await asyncio.sleep(0.5)
 
-        local = os.path.abspath(f"{CACHE_DIR}/{self.current_song['id']}.webm")
-        opts = FFMPEG_LOCAL_OPTS.copy()
-        opts['options'] = f"-vn -threads 2 -bufsize 8192k -t {self.play_duration}"
-        
+        # Since these are from autoplay, we use STREAMING for the game to avoid waiting for downloads
+        # but we use the high-quality play opts
         try:
-            source = await discord.FFmpegOpusAudio.from_probe(local, **opts)
+            info = await self.cog.bot.loop.run_in_executor(None, lambda: yt_dlp.YoutubeDL(YDL_PLAY_OPTS).extract_info(self.current_song['id'], download=False))
+            opts = FFMPEG_STREAM_OPTS.copy()
+            opts['options'] = f"-vn -threads 2 -bufsize 8192k -t {self.play_duration}"
+            
+            source = await discord.FFmpegOpusAudio.from_probe(info['url'], **opts)
             self.ctx.voice_client.play(source)
             
             if extra > 0:
-                embed = discord.Embed(title="🎮 Guess the Song!", description="Playing a longer segment...", color=COLOR_MAIN)
-                embed.add_field(name="Current Difficulty", value=f"Playing {self.play_duration} seconds")
+                target_type = "Title" if self.mode == "title" else "Artist"
+                embed = discord.Embed(title=f"🎮 Guess the {target_type}!", description="Playing a longer segment...", color=COLOR_MAIN)
+                embed.add_field(name="Difficulty", value=f"Playing {self.play_duration}s")
                 await self.message.edit(embed=embed)
         except Exception as e:
             log_error(f"Guess Game Play Error: {e}")
             await self.next_song()
 
+    def clean_text(self, text):
+        """Standardizes text for comparison."""
+        text = text.lower()
+        text = self.remove_diacritics(text)
+        # Remove common suffixes/prefixes for music
+        text = re.sub(r'\(.*?\)|\[.*?\]|official|video|audio|lyrics|feat\.|ft\.| - topic', '', text).strip()
+        # Keep only alphanumeric
+        text = re.sub(r'[^a-z0-9\s]', '', text)
+        return text
+
     async def check_guess(self, message):
         if not self.active or message.channel.id != self.ctx.channel.id or self.processing_guess: return
         
-        guess = message.content.lower().strip()
-        if len(guess) < 2: return 
+        raw_guess = message.content.strip()
+        if len(raw_guess) < 2: return 
         
-        title = self.current_song['title'].lower().strip()
-        clean_title = re.sub(r'\(.*?\)|\[.*?\]|official|video|audio|lyrics|feat\.|ft\.', '', title).strip()
-        clean_title = re.sub(r'[^a-z0-9\s]', '', clean_title)
-        clean_guess = re.sub(r'[^a-z0-9\s]', '', guess)
+        target_text = self.current_song['title'] if self.mode == "title" else self.current_song['author']
         
-        ratio = difflib.SequenceMatcher(None, clean_guess, clean_title).ratio()
-        is_correct = ratio > 0.75
+        clean_target = self.clean_text(target_text)
+        clean_guess = self.clean_text(raw_guess)
+        
+        # Logic to prevent guessing author in title mode:
+        # If the user's guess is closer to the author than the title, and we are in title mode, ignore or count as wrong.
+        if self.mode == "title":
+            clean_author = self.clean_text(self.current_song['author'])
+            author_ratio = difflib.SequenceMatcher(None, clean_guess, clean_author).ratio()
+            # If it's a very strong match for the author but not the title, ignore it
+            if author_ratio > 0.85:
+                title_ratio = difflib.SequenceMatcher(None, clean_guess, clean_target).ratio()
+                if title_ratio < 0.7:
+                    return # It's the author, not the title.
+
+        ratio = difflib.SequenceMatcher(None, clean_guess, clean_target).ratio()
+        is_correct = ratio > 0.8 # Slightly stricter
         if not is_correct and len(clean_guess) > 3:
-            if clean_guess in clean_title or clean_title in clean_guess:
+            if clean_guess in clean_target or clean_target in clean_guess:
                 is_correct = True
         
         if is_correct:
             async with self.lock:
-                if self.processing_guess: return # Double check inside lock
+                if self.processing_guess: return
                 self.processing_guess = True
                 
                 self.scores[message.author.id] = self.scores.get(message.author.id, 0) + 1
                 await message.add_reaction("✅")
                 
-                embed = discord.Embed(title="🎉 Correct!", description=f"**{message.author.display_name}** got it!\n\nIt was: **{self.current_song['title']}**", color=discord.Color.green())
+                embed = discord.Embed(title="🎉 Correct!", description=f"**{message.author.display_name}** got it!\n\nIt was: **{self.current_song['title']}**\nBy: **{self.current_song['author']}**", color=discord.Color.green())
                 embed.set_thumbnail(url=f"https://i.ytimg.com/vi/{self.current_song['id']}/mqdefault.jpg")
                 await self.ctx.send(embed=embed)
                 
@@ -1046,23 +1111,51 @@ class MusicBot(commands.Cog):
         view = ListPaginator(list(reversed(state.history)), title="History", is_queue=False)
         await ctx.send(embed=view.get_embed(), view=view, silent=True)
 
-    @commands.hybrid_command(name="guess", description="Start a 'Guess the Song' quiz using cached music")
-    async def guess_command(self, ctx):
+    @commands.hybrid_command(name="guess", description="Start a 'Guess the Song' quiz. Usage: /guess [search] [mode: title/author]")
+    @app_commands.describe(search="A song to base the quiz on (uses Autoplay)", mode="What to guess: 'title' or 'author'")
+    @app_commands.choices(mode=[
+        app_commands.Choice(name="Guess the Title", value="title"),
+        app_commands.Choice(name="Guess the Author", value="author")
+    ])
+    async def guess_command(self, ctx, search: str = None, mode: str = "title"):
         state = self.get_state(ctx.guild.id)
         if state.game:
             return await ctx.send("❌ A game is already in progress!", ephemeral=True)
         
-        # Check cache
-        valid_songs = []
-        for vid_id, title in cache_map.items():
-            if os.path.exists(f"{CACHE_DIR}/{vid_id}.webm"):
-                valid_songs.append({'id': vid_id, 'title': title})
-        
-        if len(valid_songs) < 5:
-            return await ctx.send("❌ Not enough cached songs to start a game (need at least 5 in /cache).")
-        
         await ctx.defer()
-        state.game = GuessGame(self, ctx, valid_songs)
+        
+        seed_song = None
+        if search:
+            # Search for the seed song
+            try:
+                q = search if re.match(r'^https?://', search) else f"ytsearch1:{search}"
+                info = await self.bot.loop.run_in_executor(None, lambda: yt_dlp.YoutubeDL(YDL_FLAT_OPTS).extract_info(q, download=False))
+                if 'entries' in info:
+                    e = info['entries'][0]
+                else:
+                    e = info
+                
+                seed_song = {
+                    'id': e['id'], 
+                    'title': e['title'], 
+                    'author': e.get('uploader', 'Unknown'),
+                    'url': f"https://www.youtube.com/watch?v={e['id']}"
+                }
+            except Exception as e:
+                return await ctx.send(f"❌ Could not find seed song: {e}")
+        else:
+            # Fallback to current track or a random cached song
+            if state.current_track:
+                seed_song = state.current_track
+            else:
+                valid_cached = [f.replace('.webm', '') for f in os.listdir(CACHE_DIR) if f.endswith('.webm')]
+                if valid_cached:
+                    vid_id = random.choice(valid_cached)
+                    seed_song = {'id': vid_id, 'title': cache_map.get(vid_id, 'Unknown'), 'author': 'Unknown'}
+                else:
+                    return await ctx.send("❌ Please provide a song name to start the quiz (e.g. `/guess search:manele`).")
+
+        state.game = GuessGame(self, ctx, seed_song=seed_song, mode=mode)
         await state.game.start()
 
     @commands.hybrid_command(name="autoplay")
