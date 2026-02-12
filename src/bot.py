@@ -65,7 +65,6 @@ class ServerState:
         self.queue = []
         self.current_track = None
         self.last_interaction = datetime.datetime.now()
-        self.session_new_tracks = {}
         self.processing_next = False 
         self.history = []
         self.autoplay = False
@@ -360,25 +359,32 @@ class MusicBot(commands.Cog):
 
     # --- Playback Logic ---
 
-    async def download_session_songs(self, tracks):
-        """Background task to cache songs played in the session."""
-        if not tracks:
+    async def background_download(self, track):
+        """Proactively download a song in the background with low priority."""
+        # Check if already cached or being downloaded
+        if os.path.exists(f"{CACHE_DIR}/{track['id']}.webm"):
             return
             
-        to_download = [t for t in tracks if not os.path.exists(f"{CACHE_DIR}/{t['id']}.webm")]
-        if not to_download:
-            return
-        
         await enforce_cache_limit(self.bot.loop)
-        for track in to_download:
-            await enforce_cache_limit(self.bot.loop)
+        
+        def do_download():
             try:
-                await self.bot.loop.run_in_executor(None, lambda: yt_dlp.YoutubeDL(YDL_DOWNLOAD_OPTS).download([f'https://www.youtube.com/watch?v={track["id"]}']))
+                # Lower process priority even more for the download thread if possible
+                if platform.system() != "Windows":
+                    try: os.nice(19) 
+                    except: pass
+                
+                # Use a specific YDL instance for background tasks
+                with yt_dlp.YoutubeDL(YDL_DOWNLOAD_OPTS) as ydl:
+                    ydl.download([f'https://www.youtube.com/watch?v={track["id"]}'])
+                
                 cache_map[track['id']] = track['title']
-                await self.bot.loop.run_in_executor(None, save_json, CACHE_MAP_FILE, cache_map)
+                save_json(CACHE_MAP_FILE, cache_map)
+                log_info(f"✅ Background Cached: {track['title']}")
             except Exception as e:
-                log_error(f"DL Fail: {e}")
-            await asyncio.sleep(0.5)
+                log_error(f"Background DL Fail for {track['id']}: {e}")
+
+        await self.bot.loop.run_in_executor(None, do_download)
 
     async def stop_logic(self, guild_id):
         """Clean disconnect logic."""
@@ -391,13 +397,6 @@ class MusicBot(commands.Cog):
         
         if guild and guild.voice_client:
             await guild.voice_client.disconnect()
-            
-        all_tracks = state.session_new_tracks.copy()
-        for t in state.queue:
-            all_tracks[t['id']] = t
-            
-        if all_tracks:
-            self.bot.loop.create_task(self.download_session_songs(list(all_tracks.values())))
             
         del self.states[guild_id]
 
@@ -599,11 +598,19 @@ class MusicBot(commands.Cog):
             else: await ctx.send(embed=discord.Embed(description=msg, color=COLOR_MAIN), silent=True)
 
         if 'entries' in info: 
-            state.queue.extend([proc(e) for e in info['entries'] if e])
+            tracks = [proc(e) for e in info['entries'] if e]
+            state.queue.extend(tracks)
             await send_res(f"✅ Added **{len(info['entries'])}** tracks.")
+            
+            # Start pre-downloading first 3 tracks of a playlist
+            for t in tracks[:3]:
+                self.bot.loop.create_task(self.background_download(t))
         else: 
-            state.queue.append(proc(info))
+            track = proc(info)
+            state.queue.append(track)
             if ctx.voice_client.is_playing(): await send_res(f"✅ Queued: **{info['title']}**")
+            # Start pre-downloading immediately
+            self.bot.loop.create_task(self.background_download(track))
             
         # Re-verify autoplay (moves suggestion to end)
         self.bot.loop.create_task(self.ensure_autoplay(ctx.guild.id, force=True))
@@ -639,7 +646,9 @@ class MusicBot(commands.Cog):
                     os.utime(local, None)
                     source = await discord.FFmpegOpusAudio.from_probe(local, **FFMPEG_LOCAL_OPTS)
                 else:
-                    state.session_new_tracks[next_song['id']] = next_song
+                    # If not local, stream it, but also trigger a download for future use
+                    self.bot.loop.create_task(self.background_download(next_song))
+                    
                     info = await self.bot.loop.run_in_executor(None, lambda: yt_dlp.YoutubeDL(YDL_PLAY_OPTS).extract_info(next_song['id'], download=False))
                     
                     opts = FFMPEG_STREAM_OPTS.copy()
@@ -653,6 +662,10 @@ class MusicBot(commands.Cog):
 
                 ctx.voice_client.play(source, after=lambda e: self.bot.loop.create_task(self.play_next(ctx)))
                 state.processing_next = False 
+                
+                # Proactively pre-download the NEW first song in the queue
+                if state.queue:
+                    self.bot.loop.create_task(self.background_download(state.queue[0]))
                 
                 # Trigger autoplay prefetch for the NEXT song
                 self.bot.loop.create_task(self.ensure_autoplay(ctx.guild.id))
