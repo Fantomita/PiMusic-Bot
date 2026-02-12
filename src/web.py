@@ -320,6 +320,9 @@ async def api_load_playlist(guild_id):
         return jsonify({'error': 'No guild'}), 400
         
     state = cog.get_state(guild.id)
+    if state.game and state.game.active:
+        return jsonify({'error': 'Game is active! Cannot load playlist.'}), 400
+
     content = saved_playlists[name]
     new_tracks = []
     
@@ -466,6 +469,9 @@ async def api_add(guild_id):
         return jsonify({'error': 'No guild'}), 400
     
     state = cog.get_state(guild.id)
+    if state.game and state.game.active:
+        return jsonify({'error': 'Game is active! Cannot add songs.'}), 400
+
     query = data['query']
     if not re.match(r'^https?://', query):
         query = f"ytsearch1:{query}"
@@ -547,8 +553,12 @@ async def api_game_status(guild_id):
     scores = []
     for uid, s in g.scores.items():
         if isinstance(uid, int):
-            user = cog.bot.get_user(uid)
-            name = user.display_name if user else f"User {uid}"
+            member = guild.get_member(uid)
+            if member:
+                name = member.display_name
+            else:
+                user = cog.bot.get_user(uid)
+                name = user.display_name if user else f"User {uid}"
         else:
             name = uid.replace('web_', '')
         scores.append({'name': name, 'score': s})

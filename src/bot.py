@@ -513,6 +513,8 @@ class GuessGame:
             board = "\n".join(lines)
             embed = discord.Embed(title="🏆 Final Scores", description=board, color=COLOR_MAIN)
             await self.ctx.send(embed=embed)
+        else:
+            await self.ctx.send(embed=discord.Embed(title="🛑 Game Over", description="No points were scored.", color=COLOR_MAIN))
 
 class ListPaginator(ui.View):
     """Pagination for queue, history, and cache lists."""
@@ -710,6 +712,16 @@ class MusicBot(commands.Cog):
             
         log_error("⏳ Cloudflared timed out waiting for URL.")
         return None
+
+    @commands.Cog.listener()
+    async def on_voice_state_update(self, member, before, after):
+        # Stop game if bot is disconnected/kicked from VC
+        if member.id == self.bot.user.id and before.channel and not after.channel:
+            state = self.get_state(before.channel.guild.id)
+            if state.game and state.game.active:
+                await state.game.stop()
+                if state.last_text_channel:
+                    await state.last_text_channel.send("⚠️ Bot disconnected from VC. Game stopped.", silent=True)
 
     @commands.Cog.listener()
     async def on_command_error(self, ctx, error):
@@ -941,6 +953,14 @@ class MusicBot(commands.Cog):
     async def prepare_song(self, ctx, query):
         """Main entry point for adding a song to the queue."""
         state = self.get_state(ctx.guild.id)
+        
+        if state.game and state.game.active:
+            if ctx.interaction: 
+                await ctx.interaction.followup.send("❌ Game is active! Cannot add songs.", ephemeral=True) if not ctx.interaction.response.is_done() else None
+            else:
+                await ctx.send("❌ Game is active! Cannot add songs.", silent=True)
+            return
+
         state.last_interaction = datetime.datetime.now()
         state.stopping = False
         if hasattr(ctx, 'channel'): state.last_text_channel = ctx.channel
@@ -1193,8 +1213,12 @@ class MusicBot(commands.Cog):
     @commands.hybrid_command(name="loadplaylist")
     async def loadplaylist(self, ctx, name: str):
         if name not in saved_playlists: return await ctx.send(embed=discord.Embed(description="❌ Not found.", color=discord.Color.red()), silent=True)
-        content = saved_playlists[name]
+        
         state = self.get_state(ctx.guild.id)
+        if state.game and state.game.active:
+            return await ctx.send("❌ Game is active! Cannot load playlist.", ephemeral=True)
+
+        content = saved_playlists[name]
         
         if isinstance(content, list):
             state.queue.extend(content)
