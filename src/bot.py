@@ -178,7 +178,7 @@ class GuessGame:
         self.cog = cog
         self.ctx = ctx
         self.seed_song = seed_song
-        self.mode = mode # "title" or "author"
+        self.mode = mode # "title", "author", or "both"
         self.songs_pool = []
         self.current_song = None
         self.play_duration = 5
@@ -295,8 +295,14 @@ class GuessGame:
         self.processing_guess = False
         self.transitioning = False
         
-        target_type = "Title" if self.mode == "title" else "Artist/Author"
-        embed = discord.Embed(title=f"🎮 Guess the {target_type}!", description=f"Listen and type the **{target_type.lower()}**!\n\n*Romanian diacritics are optional.*", color=COLOR_MAIN)
+        if self.mode == "title": target_type = "Title"
+        elif self.mode == "author": target_type = "Artist/Author"
+        else: target_type = "Artist & Title"
+
+        embed = discord.Embed(title=f"🎮 Guess the {target_type}!", description=f"Listen and type the **{target_type.lower()}**!\n\n*Romanian diacritics and capitals are ignored.*", color=COLOR_MAIN)
+        if self.mode == "both":
+            embed.set_footer(text="Format: Artist - Title (or just Title - Artist)")
+
         embed.add_field(name="Difficulty", value=f"Playing {self.play_duration}s")
         
         self.message = await self.ctx.send(embed=embed, view=GuessGameView(self))
@@ -338,8 +344,12 @@ class GuessGame:
         """Standardizes text for comparison."""
         text = text.lower()
         text = self.remove_diacritics(text)
-        text = re.sub(r'\(.*?\)|\[.*?\]|official|video|audio|lyrics|feat\.|ft\.| - topic', '', text).strip()
-        text = re.sub(r'[^a-z0-9\s]', '', text)
+        # Remove common suffixes/prefixes for music
+        text = re.sub(r'\(.*?\)|\[.*?\]|official|video|audio|lyrics|feat\.|ft\.| - topic|remix|hd|4k', '', text).strip()
+        # Keep only alphanumeric and a few important symbols for 'both' mode
+        text = re.sub(r'[^a-z0-9\s\-]', '', text)
+        # Normalize spaces
+        text = " ".join(text.split())
         return text
 
     async def check_guess(self, message):
@@ -348,6 +358,22 @@ class GuessGame:
         raw_guess = message.content.strip()
         if len(raw_guess) < 2: return 
         
+        if self.mode == "both":
+            # For 'both' mode, we need both author and title in the guess
+            target_author = self.clean_text(self.current_song['author'])
+            target_title = self.clean_text(self.current_song['title'])
+            clean_guess = self.clean_text(raw_guess)
+            
+            # Use ratio for fuzzy matching both parts
+            # Check if guess contains parts of both
+            author_match = difflib.SequenceMatcher(None, clean_guess, target_author).ratio() > 0.6 or target_author in clean_guess
+            title_match = difflib.SequenceMatcher(None, clean_guess, target_title).ratio() > 0.6 or target_title in clean_guess
+            
+            if author_match and title_match:
+                await message.add_reaction("✅")
+                await self.trigger_transition(winner=message.author)
+            return
+
         target_text = self.current_song['title'] if self.mode == "title" else self.current_song['author']
         
         clean_target = self.clean_text(target_text)
@@ -1133,11 +1159,12 @@ class MusicBot(commands.Cog):
         view = ListPaginator(list(reversed(state.history)), title="History", is_queue=False)
         await ctx.send(embed=view.get_embed(), view=view, silent=True)
 
-    @commands.hybrid_command(name="guess", description="Start a 'Guess the Song' quiz. Usage: /guess [search] [mode: title/author]")
-    @app_commands.describe(search="A song to base the quiz on (uses Autoplay)", mode="What to guess: 'title' or 'author'")
+    @commands.hybrid_command(name="guess", description="Start a 'Guess the Song' quiz. Usage: /guess [search] [mode: title/author/both]")
+    @app_commands.describe(search="A song to base the quiz on (uses Autoplay)", mode="What to guess: 'title', 'author', or 'both'")
     @app_commands.choices(mode=[
         app_commands.Choice(name="Guess the Title", value="title"),
-        app_commands.Choice(name="Guess the Author", value="author")
+        app_commands.Choice(name="Guess the Author", value="author"),
+        app_commands.Choice(name="Guess Both (Artist - Title)", value="both")
     ])
     async def guess_command(self, ctx, search: str = None, mode: str = "title"):
         state = self.get_state(ctx.guild.id)
