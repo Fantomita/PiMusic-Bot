@@ -536,6 +536,7 @@
             <div class="tabs">
                 <button class="tab-btn active" onclick="switchTab('queue')">Queue <span id="q-count">(0)</span></button>
                 <button class="tab-btn" onclick="switchTab('playlists')">Playlists</button>
+                <button class="tab-btn" onclick="switchTab('lyrics')">Lyrics</button>
                 <button class="tab-btn" id="tab-btn-game" onclick="switchTab('game')">🎮 Game</button>
             </div>
 
@@ -552,6 +553,14 @@
                     <button class="btn-save" onclick="savePlaylist()">💾 Save Playlist</button>
                 </div>
                 <div id="playlist-list"></div>
+            </div>
+
+            <div id="tab-lyrics" class="section">
+                <div class="stat-card" style="min-height: 400px; white-space: pre-wrap; line-height: 1.6; text-align: left;">
+                    <h3 style="margin-top:0; color:var(--primary);" id="lyrics-title">Lyrics</h3>
+                    <div id="lyrics-content" style="color:#ddd; font-size: 1.1em;">Loading...</div>
+                    <button class="btn-save" style="margin-top:20px; width:100%;" onclick="fetchLyrics()">🔄 Refresh Lyrics</button>
+                </div>
             </div>
 
             <div id="tab-game" class="section">
@@ -638,6 +647,32 @@
 
         function handleEnter(e) { if(e.key === 'Enter') searchSong(); }
         function handleGuess(e) { if(e.key === 'Enter') sendGuess(); }
+
+        async function fetchLyrics() {
+            const content = document.getElementById('lyrics-content');
+            content.innerText = "Loading lyrics...";
+            try {
+                const res = await fetch(`/api/${guild_id}/lyrics`);
+                if (res.status === 200) {
+                    const data = await res.json();
+                    content.innerText = data.lyrics;
+                } else {
+                    const data = await res.json();
+                    content.innerText = data.error || "Lyrics not available.";
+                }
+            } catch (e) {
+                content.innerText = "Error fetching lyrics.";
+            }
+        }
+        
+        // Auto-fetch lyrics when switching to tab
+        const originalSwitchTab = switchTab;
+        switchTab = function(tab) {
+            originalSwitchTab(tab);
+            if (tab === 'lyrics') {
+                fetchLyrics();
+            }
+        }
 
         async function fetchStatus() {
             try {

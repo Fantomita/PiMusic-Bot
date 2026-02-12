@@ -15,6 +15,7 @@ from utils import (
     log_error, log_info, save_json, format_time, get_thumbnail_url, 
     cache_map, saved_playlists
 )
+from lyrics import lyrics_manager
 
 app = Quart(__name__, template_folder='templates')
 logging.getLogger('quart.serving').setLevel(logging.ERROR)
@@ -402,6 +403,23 @@ async def api_search(guild_id):
         return jsonify(res)
     except Exception:
         return jsonify([]), 500
+
+@app.route('/api/<int:guild_id>/lyrics')
+async def api_lyrics(guild_id):
+    guild = get_target_guild(guild_id)
+    cog = get_bot_cog()
+    if not guild or not cog: return jsonify({'error': 'No guild'}), 400
+    
+    state = cog.get_state(guild.id)
+    if not state.current_track:
+        return jsonify({'error': 'No song playing'}), 404
+        
+    lyrics = await cog.bot.loop.run_in_executor(None, lyrics_manager.get_lyrics, state.current_track['id'])
+    
+    if lyrics:
+        return jsonify({'lyrics': lyrics})
+    else:
+        return jsonify({'error': 'Lyrics not found'}), 404
 
 @app.route('/api/<int:guild_id>/control/<action>', methods=['POST'])
 async def api_control(guild_id, action):
