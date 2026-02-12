@@ -18,10 +18,10 @@ COLOR_MAIN = 0xFFD700  # Gold
 # FFmpeg Options
 FFMPEG_STREAM_OPTS = {
     'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5 -nostdin',
-    'options': '-vn -threads 2 -bufsize 2048k'
+    'options': '-vn -threads 2 -bufsize 8192k'
 }
 FFMPEG_LOCAL_OPTS = {
-    'options': '-vn -threads 2 -bufsize 2048k'
+    'options': '-vn -threads 2 -bufsize 8192k'
 }
 
 # yt-dlp Options
@@ -35,6 +35,13 @@ COMMON_YDL_ARGS = {
 YDL_PLAY_OPTS = {
     'format': 'bestaudio[ext=webm]/bestaudio/best',
     **COMMON_YDL_ARGS
+}
+
+YDL_SINGLE_OPTS = {
+    'extract_flat': 'in_playlist',
+    'playlist_items': '1', # Only get first item if it forces a list
+    **COMMON_YDL_ARGS,
+    'noplaylist': True # Critical change
 }
 
 YDL_FLAT_OPTS = {

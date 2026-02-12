@@ -30,7 +30,7 @@ from config import (
     CACHE_DIR, CACHE_MAP_FILE, COLOR_MAIN, FFMPEG_LOCAL_OPTS, FFMPEG_STREAM_OPTS,
     MAX_CACHE_SIZE_GB, PLAYLIST_FILE, SETTINGS_FILE, TOKEN, YDL_DOWNLOAD_OPTS,
     YDL_FLAT_OPTS, YDL_MIX_OPTS, YDL_PLAY_OPTS, YDL_PLAYLIST_LOAD_OPTS,
-    YDL_SEARCH_OPTS, COMMON_YDL_ARGS
+    YDL_SEARCH_OPTS, COMMON_YDL_ARGS, YDL_SINGLE_OPTS
 )
 from utils import (
     log_error, log_info, load_json, save_json, format_time, 
@@ -395,7 +395,7 @@ class GuessGame:
                 # Use flat opts to get info quickly
                 info = await self.cog.bot.loop.run_in_executor(None, lambda: yt_dlp.YoutubeDL(YDL_PLAY_OPTS).extract_info(self.current_song['id'], download=False))
                 opts = FFMPEG_STREAM_OPTS.copy()
-                opts['options'] = f"-vn -threads 2 -bufsize 1024k -t {self.play_duration}"
+                opts['options'] = f"-vn -threads 2 -bufsize 8192k -t {self.play_duration}"
                 
                 # Final check before playing
                 if self.transitioning or not self.active: return
@@ -960,7 +960,7 @@ class MusicBot(commands.Cog):
             await self.ensure_autoplay(guild_id, force=True)
             return True
 
-    async def prepare_song(self, ctx, query):
+    async def prepare_song(self, ctx, query, is_playlist=False):
         """Main entry point for adding a song to the queue."""
         state = self.get_state(ctx.guild.id)
         
@@ -988,8 +988,18 @@ class MusicBot(commands.Cog):
         if ctx.interaction and not ctx.interaction.response.is_done(): 
             await ctx.interaction.response.defer()
         
-        # Use Flat Options (verified working)
-        info = await self.bot.loop.run_in_executor(None, lambda: yt_dlp.YoutubeDL(YDL_FLAT_OPTS).extract_info(query, download=False))
+        # Use Single Opts if not explicitly a playlist and not a search query
+        # If it's a search query (ytsearch:), we probably want the default flat opts behavior which handles search results
+        # But prepare_song usually gets a direct URL from search selection or a user query.
+        opts = YDL_SINGLE_OPTS if (not is_playlist and 'ytsearch' not in query) else YDL_FLAT_OPTS
+
+        try:
+            info = await self.bot.loop.run_in_executor(None, lambda: yt_dlp.YoutubeDL(opts).extract_info(query, download=False))
+        except Exception as e:
+            msg = f"❌ Error extracting info: {str(e)[:100]}"
+            if ctx.interaction: await ctx.interaction.followup.send(msg, ephemeral=True)
+            else: await ctx.send(msg, silent=True)
+            return
         
         # 2. Aggressive clear (after awaits, ensures we clear any suggestion added during info extraction)
         state.queue = [t for t in state.queue if not (isinstance(t, dict) and t.get('suggested'))]
@@ -1011,8 +1021,9 @@ class MusicBot(commands.Cog):
 
         if 'entries' in info: 
             tracks = [proc(e) for e in info['entries'] if e]
+            if not tracks: return await send_res("❌ No tracks found.")
             state.queue.extend(tracks)
-            await send_res(f"✅ Added **{len(info['entries'])}** tracks.")
+            await send_res(f"✅ Added **{len(tracks)}** tracks.")
             
             # Start pre-downloading first 3 tracks of a playlist
             for t in tracks[:3]:
@@ -1028,6 +1039,37 @@ class MusicBot(commands.Cog):
         self.bot.loop.create_task(self.ensure_autoplay(ctx.guild.id, force=True))
 
         if not ctx.voice_client.is_playing(): await self.play_next(ctx)
+
+    @commands.hybrid_command(name="playplaylist", aliases=["pp", "pl"], description="Play a playlist from a URL and save it")
+    async def play_playlist_cmd(self, ctx, *, url: str):
+        """Plays a playlist and saves it as a live playlist."""
+        if 'youtube.com' not in url and 'youtu.be' not in url:
+            return await ctx.send("❌ Invalid YouTube URL.", silent=True)
+            
+        await ctx.defer()
+        msg = await ctx.send("🔄 Fetching playlist info...", silent=True)
+        
+        try:
+             # Just fetch basic info first to get title
+             info = await self.bot.loop.run_in_executor(None, lambda: yt_dlp.YoutubeDL({'extract_flat': True, 'quiet': True}).extract_info(url, download=False))
+             title = info.get('title', 'Unknown Playlist')
+             
+             # Sanitize title
+             safe_title = "".join(c for c in title if c.isalnum() or c in (' ', '-', '_')).strip()
+             if not safe_title: safe_title = f"Playlist-{int(time.time())}"
+             
+             # Avoid overwriting if possible, or just overwrite? Prompt says "saving it as a live playlist too".
+             # Let's save it.
+             saved_playlists[safe_title] = {'type': 'live', 'url': url}
+             save_json(PLAYLIST_FILE, saved_playlists)
+             
+             await msg.edit(content=f"💾 Saved as **{safe_title}**. Queuing...")
+             
+             # Now play it as a playlist
+             await self.prepare_song(ctx, url, is_playlist=True)
+             
+        except Exception as e:
+            await msg.edit(content=f"❌ Error: {e}")
 
     async def play_next(self, ctx):
         """Recursive function to play the next song in the queue."""
