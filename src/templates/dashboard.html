@@ -405,6 +405,39 @@
         .btn-save { width: 100%; padding: 12px; background: #333; color: white; border: none; border-radius: 12px; font-weight: 600; cursor: pointer; transition:0.2s; }
         .btn-save:hover { background: var(--primary); color:black; }
 
+        /* Stats Grid */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        .stat-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 12px 5px;
+            text-align: center;
+            transition: 0.3s;
+            box-shadow: var(--shadow);
+        }
+
+        .stat-label {
+            font-size: 0.65rem;
+            color: var(--text-muted);
+            font-weight: 700;
+            text-transform: uppercase;
+            margin-bottom: 2px;
+            letter-spacing: 0.05em;
+        }
+
+        .stat-value {
+            font-size: 1rem;
+            font-weight: 800;
+            color: var(--primary);
+        }
+
         /* Mobile Optimization */
         @media (max-width: 900px) {
             .container { grid-template-columns: 1fr; padding: 15px; gap: 20px; }
@@ -454,6 +487,25 @@
     <div class="container">
         <!-- Left Column -->
         <div class="left-col">
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-label">CPU</div>
+                    <div class="stat-value" id="stat-cpu">--%</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">RAM</div>
+                    <div class="stat-value" id="stat-ram">--%</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">TEMP</div>
+                    <div class="stat-value" id="stat-temp">--°C</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">DISK</div>
+                    <div class="stat-value" id="stat-disk">--GB</div>
+                </div>
+            </div>
+
             <div class="player-card">
                 <div class="album-art-container">
                     <img src="https://via.placeholder.com/300" id="np-img" class="album-art" onerror="this.src='https://via.placeholder.com/300?text=Music'">
@@ -714,8 +766,31 @@
             fetchPlaylists();
         }
 
+        async function fetchSysInfo() {
+            try {
+                const res = await fetch('/api/sysinfo');
+                const data = await res.json();
+                document.getElementById('stat-cpu').innerText = `${data.cpu}%`;
+                document.getElementById('stat-ram').innerText = `${data.ram}%`;
+                document.getElementById('stat-temp').innerText = `${data.temp}°C`;
+                document.getElementById('stat-disk').innerText = `${data.storage_free}GB`;
+                
+                // Optional: color coding based on load
+                const cpuVal = document.getElementById('stat-cpu');
+                if (data.cpu > 80) cpuVal.style.color = 'var(--danger)';
+                else cpuVal.style.color = 'var(--primary)';
+
+                const tempVal = document.getElementById('stat-temp');
+                if (data.temp > 70) tempVal.style.color = 'var(--danger)';
+                else tempVal.style.color = 'var(--primary)';
+
+            } catch (e) {}
+        }
+
         setInterval(fetchStatus, 2000);
+        setInterval(fetchSysInfo, 5000);
         fetchStatus();
+        fetchSysInfo();
         fetchPlaylists();
     </script>
 </body>

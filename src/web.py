@@ -3,6 +3,8 @@ import logging
 import os
 import random
 import re
+import shutil
+import psutil
 from quart import Quart, jsonify, make_response, redirect, render_template, request, send_from_directory
 import yt_dlp
 
@@ -139,6 +141,46 @@ async def dashboard(guild_id):
     
     name = cog.bot.user.name if cog.bot.user else "MusicBot"
     return await render_template('dashboard.html', bot_name=name, guild_id=guild_id)
+
+@app.route('/api/sysinfo')
+async def api_sysinfo():
+    # CPU Usage
+    cpu_usage = psutil.cpu_percent()
+    
+    # RAM Usage
+    ram = psutil.virtual_memory()
+    ram_usage = ram.percent
+    
+    # Temperature (Linux/Pi)
+    temp = 0
+    try:
+        if os.path.exists("/sys/class/thermal/thermal_zone0/temp"):
+            with open("/sys/class/thermal/thermal_zone0/temp", "r") as f:
+                temp = int(f.read()) / 1000.0
+    except:
+        pass
+    
+    # Storage
+    try:
+        if not os.path.exists(CACHE_DIR):
+            os.makedirs(CACHE_DIR, exist_ok=True)
+        storage = shutil.disk_usage(CACHE_DIR)
+        free_gb = storage.free / (1024**3)
+        total_gb = storage.total / (1024**3)
+        storage_percent = (storage.used / storage.total) * 100
+    except Exception:
+        free_gb = 0
+        total_gb = 0
+        storage_percent = 0
+    
+    return jsonify({
+        'cpu': cpu_usage,
+        'ram': ram_usage,
+        'temp': round(temp, 1),
+        'storage_free': round(free_gb, 1),
+        'storage_total': round(total_gb, 1),
+        'storage_percent': round(storage_percent, 1)
+    })
 
 # --- API Routes ---
 
