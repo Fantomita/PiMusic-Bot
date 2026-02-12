@@ -542,7 +542,9 @@ async def api_game_status(guild_id):
         'round_duration': g.play_duration,
         'scores': scores,
         'transitioning': g.transitioning,
-        'history': g.history
+        'history': g.history,
+        'last_reveal': g.last_reveal,
+        'channel': g.ctx.channel.name if hasattr(g.ctx, 'channel') and g.ctx.channel else 'Unknown'
     })
 
 @app.route('/api/<int:guild_id>/game/guess', methods=['POST'])

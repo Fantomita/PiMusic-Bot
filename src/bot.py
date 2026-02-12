@@ -224,6 +224,7 @@ class GuessGame:
         self.lock = asyncio.Lock()
         self.played_ids = set()
         self.history = [] # List of {type: 'guess'|'event', user: str, text: str, correct: bool}
+        self.last_reveal = None # Stores {title: str, author: str, id: str} for display between rounds
 
     def add_to_history(self, event_type, user, text, correct=False):
         self.history.append({
@@ -270,14 +271,15 @@ class GuessGame:
     async def start(self):
         # Join VC
         if not self.ctx.voice_client:
-            if self.ctx.author.voice:
+            # If we have an author with a voice channel (Discord start)
+            if hasattr(self.ctx.author, 'voice') and self.ctx.author.voice:
                 try: await self.ctx.author.voice.channel.connect()
                 except: 
                     self.active = False
-                    return await self.ctx.send("❌ Could not join VC.")
+                    return await self.ctx.send("❌ Could not join your VC.")
             else:
                 self.active = False
-                return await self.ctx.send("❌ You must be in a VC!")
+                return await self.ctx.send("❌ Bot is not in a VC and no target VC found!")
         
         if self.ctx.voice_client.is_playing():
             self.ctx.voice_client.stop()
@@ -297,6 +299,11 @@ class GuessGame:
                 self.ctx.voice_client.stop()
 
             if reveal or winner:
+                self.last_reveal = {
+                    'title': self.current_song['title'],
+                    'author': self.current_song['author'],
+                    'id': self.current_song['id']
+                }
                 if winner:
                     self.scores[winner.id] = self.scores.get(winner.id, 0) + 1
                     msg_text = f"**{winner.display_name}** got it! It was: **{self.current_song['title']}** by **{self.current_song['author']}**"
@@ -459,6 +466,12 @@ class GuessGame:
         is_correct = await self.validate_guess(guess_text)
         self.add_to_history('guess', user_name, guess_text, is_correct)
         
+        # Mirror guess to Discord
+        try:
+            icon = "✅" if is_correct else "❌"
+            await self.ctx.send(f"🌐 **{user_name}** (Web): {guess_text} {icon}")
+        except: pass
+
         if is_correct:
             # Create a dummy user object for the winner
             class WebUser:
@@ -1324,13 +1337,16 @@ class MusicBot(commands.Cog):
         if not target_channel:
              return False, "No text channel found for messages."
 
-        state.game.ctx = type('WebCtx', (), {
-            'guild': guild,
-            'voice_client': guild.voice_client,
-            'channel': target_channel,
-            'author': self.bot.user,
-            'send': lambda *args, **kwargs: target_channel.send(*args, **kwargs)
-        })()
+        class WebCtx:
+            def __init__(self, g, v, c, b):
+                self.guild = g
+                self.voice_client = v
+                self.channel = c
+                self.author = b.user
+            async def send(self, *args, **kwargs):
+                return await self.channel.send(*args, **kwargs)
+
+        state.game.ctx = WebCtx(guild, guild.voice_client, target_channel, self.bot)
 
         await state.game.start()
         return True, "Game started"

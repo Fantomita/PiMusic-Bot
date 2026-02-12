@@ -734,7 +734,8 @@
                     }
                     gameActive = true;
                     
-                    document.getElementById('game-status').innerText = `Mode: Guess the ${data.mode.toUpperCase()} | Playing: ${data.round_duration}s`;
+                    const channelInfo = data.channel ? ` | #${data.channel}` : '';
+                    document.getElementById('game-status').innerText = `Mode: Guess the ${data.mode.toUpperCase()} | Playing: ${data.round_duration}s${channelInfo}`;
                     
                     // Leaderboard
                     const scoreList = document.getElementById('game-scores');
@@ -744,10 +745,8 @@
                     } else {
                         data.scores.forEach((s, i) => {
                             const row = document.createElement('div');
-                            row.style.display = 'flex';
-                            row.style.justifyContent = 'space-between';
-                            row.style.padding = '8px 15px';
-                            row.style.borderBottom = '1px solid var(--border)';
+                            row.style.display = 'flex'; row.style.justifyContent = 'space-between';
+                            row.style.padding = '8px 15px'; row.style.borderBottom = '1px solid var(--border)';
                             row.innerHTML = `<span>${i+1}. ${s.name}</span> <span style="font-weight:bold; color:var(--primary);">${s.score} pts</span>`;
                             scoreList.appendChild(row);
                         });
@@ -761,9 +760,7 @@
                     if (data.history) {
                         data.history.forEach(item => {
                             const div = document.createElement('div');
-                            div.style.padding = '6px 10px';
-                            div.style.borderRadius = '8px';
-                            div.style.fontSize = '0.9rem';
+                            div.style.padding = '6px 10px'; div.style.borderRadius = '8px'; div.style.fontSize = '0.9rem';
                             
                             if (item.type === 'guess') {
                                 div.style.background = 'rgba(255,255,255,0.03)';
@@ -775,13 +772,11 @@
                             } else {
                                 div.style.background = 'rgba(255, 215, 0, 0.05)';
                                 div.style.color = 'var(--primary)';
-                                div.style.fontStyle = 'italic';
-                                div.style.textAlign = 'center';
+                                div.style.fontStyle = 'italic'; div.style.textAlign = 'center';
                                 div.innerHTML = item.text;
                                 if (item.user === 'SONG_INFO') {
                                     div.style.background = 'rgba(255, 255, 255, 0.05)';
-                                    div.style.color = '#fff';
-                                    div.style.fontWeight = '700';
+                                    div.style.color = '#fff'; div.style.fontWeight = '700';
                                 }
                             }
                             historyDiv.appendChild(div);
@@ -789,17 +784,23 @@
                     }
                     if (shouldScroll) historyDiv.scrollTop = historyDiv.scrollHeight;
 
-                    if(data.transitioning) {
-                         document.getElementById('guess-feedback').innerText = "🎉 Correct! Next song coming...";
-                         document.getElementById('guess-feedback').style.color = "#2ecc71";
-                         document.getElementById('guessInput').disabled = true;
+                    // Reveal info handling
+                    if (data.transitioning) {
+                        const feedback = document.getElementById('guess-feedback');
+                        if (data.last_reveal) {
+                            feedback.innerHTML = `It was: <span style="color:#fff;">${data.last_reveal.title}</span> by <span style="color:#fff;">${data.last_reveal.author}</span>`;
+                        } else {
+                            feedback.innerText = "🎉 Correct! Next song coming...";
+                        }
+                        feedback.style.color = "var(--primary)";
+                        document.getElementById('guessInput').disabled = true;
                     } else {
-                         if(document.getElementById('guessInput').disabled) {
+                        if(document.getElementById('guessInput').disabled) {
                              document.getElementById('guessInput').disabled = false;
                              document.getElementById('guessInput').value = '';
                              document.getElementById('guess-feedback').innerText = "";
                              document.getElementById('guessInput').focus();
-                         }
+                        }
                     }
 
                 } else {
@@ -815,8 +816,7 @@
                     if (data.channels) {
                         data.channels.forEach(ch => {
                             const opt = document.createElement('option');
-                            opt.value = ch.id;
-                            opt.innerText = ch.name;
+                            opt.value = ch.id; opt.innerText = ch.name;
                             if (ch.id === currentVal) opt.selected = true;
                             sel.appendChild(opt);
                         });
