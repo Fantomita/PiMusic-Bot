@@ -153,6 +153,12 @@ class GuessGameView(ui.View):
         await interaction.response.defer()
         await self.game.play_segment(extra=5)
 
+    @ui.button(label="Rehear", emoji="👂", style=discord.ButtonStyle.secondary)
+    async def rehear(self, interaction, button):
+        if not self.game.active: return
+        await interaction.response.defer()
+        await self.game.play_segment(extra=0)
+
     @ui.button(label="Skip / Reveal", emoji="⏭️", style=discord.ButtonStyle.gray)
     async def skip_song(self, interaction, button):
         if not self.game.active: return
@@ -178,6 +184,8 @@ class GuessGame:
         self.skips = set()
         self.message = None
         self.scores = {} # user_id -> points
+        self.processing_guess = False
+        self.lock = asyncio.Lock()
 
     async def start(self):
         # Join VC
@@ -198,26 +206,32 @@ class GuessGame:
         await self.next_song()
 
     async def next_song(self):
-        if not self.active: return
-        self.current_song = random.choice(self.songs)
-        self.play_duration = 5
-        self.skips = set()
-        
-        embed = discord.Embed(title="🎮 Guess the Song!", description="Listen closely and type the title in chat!\n\n*Hint: Partial titles work!*", color=COLOR_MAIN)
-        embed.add_field(name="Current Difficulty", value=f"Playing {self.play_duration} seconds")
-        
-        if self.message:
-            try: await self.message.delete()
-            except: pass
+        async with self.lock:
+            if not self.active: return
+            self.current_song = random.choice(self.songs)
+            self.play_duration = 5
+            self.skips = set()
+            self.processing_guess = False
             
-        self.message = await self.ctx.send(embed=embed, view=GuessGameView(self))
-        await self.play_segment()
+            embed = discord.Embed(title="🎮 Guess the Song!", description="Listen closely and type the title in chat!\n\n*Hint: Partial titles work!*", color=COLOR_MAIN)
+            embed.add_field(name="Current Difficulty", value=f"Playing {self.play_duration} seconds")
+            
+            if self.message:
+                try: await self.message.delete()
+                except: pass
+                
+            self.message = await self.ctx.send(embed=embed, view=GuessGameView(self))
+            await self.play_segment()
 
     async def play_segment(self, extra=0):
         if not self.active or not self.ctx.voice_client: return
         
         self.play_duration += extra
         
+        # If already playing and it's a rehear (extra=0), don't restart unless needed
+        if self.ctx.voice_client.is_playing() and extra == 0:
+            return
+
         if self.ctx.voice_client.is_playing():
             self.ctx.voice_client.stop()
             await asyncio.sleep(0.5)
@@ -239,36 +253,34 @@ class GuessGame:
             await self.next_song()
 
     async def check_guess(self, message):
-        if not self.active or message.channel.id != self.ctx.channel.id: return
+        if not self.active or message.channel.id != self.ctx.channel.id or self.processing_guess: return
         
         guess = message.content.lower().strip()
-        if len(guess) < 2: return # Ignore very short messages
+        if len(guess) < 2: return 
         
         title = self.current_song['title'].lower().strip()
-        
-        # Clean title for better matching (remove trash)
         clean_title = re.sub(r'\(.*?\)|\[.*?\]|official|video|audio|lyrics|feat\.|ft\.', '', title).strip()
         clean_title = re.sub(r'[^a-z0-9\s]', '', clean_title)
         clean_guess = re.sub(r'[^a-z0-9\s]', '', guess)
         
-        # Fuzzy matching
         ratio = difflib.SequenceMatcher(None, clean_guess, clean_title).ratio()
-        
-        # Correct if: close enough, or title contains guess (if guess is long enough), or guess contains title
         is_correct = ratio > 0.75
         if not is_correct and len(clean_guess) > 3:
             if clean_guess in clean_title or clean_title in clean_guess:
                 is_correct = True
         
         if is_correct:
-            self.scores[message.author.id] = self.scores.get(message.author.id, 0) + 1
-            await message.add_reaction("✅")
-            
-            # Reveal with original formatting
-            embed = discord.Embed(title="🎉 Correct!", description=f"**{message.author.display_name}** got it!\n\nIt was: **{self.current_song['title']}**", color=discord.Color.green())
-            embed.set_thumbnail(url=f"https://i.ytimg.com/vi/{self.current_song['id']}/mqdefault.jpg")
-            await self.ctx.send(embed=embed)
-            
+            async with self.lock:
+                if self.processing_guess: return # Double check inside lock
+                self.processing_guess = True
+                
+                self.scores[message.author.id] = self.scores.get(message.author.id, 0) + 1
+                await message.add_reaction("✅")
+                
+                embed = discord.Embed(title="🎉 Correct!", description=f"**{message.author.display_name}** got it!\n\nIt was: **{self.current_song['title']}**", color=discord.Color.green())
+                embed.set_thumbnail(url=f"https://i.ytimg.com/vi/{self.current_song['id']}/mqdefault.jpg")
+                await self.ctx.send(embed=embed)
+                
             await asyncio.sleep(2)
             await self.next_song()
 
