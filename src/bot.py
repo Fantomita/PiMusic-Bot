@@ -1331,8 +1331,14 @@ class MusicBot(commands.Cog):
         # Direct start (usually from Web)
         state.game = GuessGame(self, None, seed_song=seed_song, mode=mode)
         
-        # Determine notification channel
-        target_channel = (ctx.channel if ctx else None) or state.last_text_channel or (guild.text_channels[0] if guild.text_channels else None)
+        # Determine notification channel: 1. Set channel, 2. Current ctx, 3. Last interaction, 4. First available
+        set_channel_id = server_settings.get(str(guild_id))
+        target_channel = None
+        if set_channel_id:
+            target_channel = guild.get_channel(int(set_channel_id))
+        
+        if not target_channel:
+            target_channel = (ctx.channel if ctx else None) or state.last_text_channel or (guild.text_channels[0] if guild.text_channels else None)
         
         if not target_channel:
              return False, "No text channel found for messages."
