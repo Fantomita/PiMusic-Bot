@@ -195,14 +195,19 @@ class GuessGame:
         """Removes Romanian diacritics and other accents."""
         return "".join(c for c in unicodedata.normalize('NFD', text) if unicodedata.category(c) != 'Mn')
 
-    async def fetch_more_songs(self):
+    async def fetch_more_songs(self, seed_id=None):
         """Uses autoplay logic to find related songs for the game."""
-        seed = self.seed_song
+        # Use provided seed_id, or fall back to original seed_song
+        sid = seed_id or self.seed_song['id']
         try:
-            url = f"https://www.youtube.com/watch?v={seed['id']}&list=RD{seed['id']}"
+            url = f"https://www.youtube.com/watch?v={sid}&list=RD{sid}"
             info = await self.cog.bot.loop.run_in_executor(None, lambda: yt_dlp.YoutubeDL(YDL_MIX_OPTS).extract_info(url, download=False))
             if 'entries' in info:
-                new_entries = [e for e in info['entries'] if e and e['id'] not in self.played_ids]
+                # Strictly filter out already played IDs and already pooled IDs
+                pooled_ids = {s['id'] for s in self.songs_pool}
+                new_entries = [e for e in info['entries'] if e and e['id'] not in self.played_ids and e['id'] not in pooled_ids]
+                
+                added_count = 0
                 for e in new_entries:
                     track = {
                         'id': e['id'], 
@@ -211,7 +216,10 @@ class GuessGame:
                         'url': e.get('url') or f"https://www.youtube.com/watch?v={e['id']}"
                     }
                     self.songs_pool.append(track)
+                    added_count += 1
+                
                 random.shuffle(self.songs_pool)
+                log_info(f"🎮 GuessGame: Added {added_count} new songs to pool using seed {sid}")
         except Exception as e:
             log_error(f"Guess Game pool fetch failed: {e}")
 
@@ -249,7 +257,6 @@ class GuessGame:
                     self.scores[winner.id] = self.scores.get(winner.id, 0) + 1
                     embed = discord.Embed(title="🎉 Correct!", description=f"**{winner.display_name}** got it!\n\nIt was: **{self.current_song['title']}**\nBy: **{self.current_song['author']}**", color=discord.Color.green())
                 else:
-                    target = self.game.current_song['title'] if self.mode == "title" else self.game.current_song['author']
                     embed = discord.Embed(title="⏭️ Skipped", description=f"It was: **{self.current_song['title']}**\nBy: **{self.current_song['author']}**", color=discord.Color.orange())
                 
                 embed.set_thumbnail(url=f"https://i.ytimg.com/vi/{self.current_song['id']}/mqdefault.jpg")
@@ -268,13 +275,18 @@ class GuessGame:
     async def next_song(self):
         if not self.active: return
         
-        # Refill pool if empty
-        if not self.songs_pool:
-            await self.ctx.send("🔄 Fetching more songs...")
-            await self.fetch_more_songs()
+        # Refill pool if empty or low
+        if len(self.songs_pool) < 2:
+            # Use the last played song as a new seed to get fresh variety
+            new_seed = self.current_song['id'] if self.current_song else None
+            await self.ctx.send("🔄 Refreshing song pool...")
+            await self.fetch_more_songs(seed_id=new_seed)
+        
+        # Final safety filter
+        self.songs_pool = [s for s in self.songs_pool if s['id'] not in self.played_ids]
         
         if not self.songs_pool:
-            await self.ctx.send("❌ Could not find enough songs. Ending game.")
+            await self.ctx.send("❌ Could not find enough unique songs. Ending game.")
             return await self.stop()
 
         self.current_song = self.songs_pool.pop(0)
