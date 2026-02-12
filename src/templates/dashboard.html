@@ -729,6 +729,11 @@
                     startUI.style.display = 'none';
                     gameBtn.style.color = 'var(--primary)';
                     
+                    // Disable Music Input
+                    document.getElementById('urlInput').disabled = true;
+                    document.getElementById('urlInput').placeholder = "Game Active - Music Disabled";
+                    document.querySelector('.search-btn').disabled = true;
+
                     if (!gameActive) {
                         gameBtn.style.animation = 'pulse 1s infinite';
                     }
@@ -809,6 +814,11 @@
                     gameBtn.style.color = 'var(--text-muted)';
                     gameActive = false;
                     
+                    // Enable Music Input
+                    document.getElementById('urlInput').disabled = false;
+                    document.getElementById('urlInput').placeholder = "Paste YouTube URL or search...";
+                    document.querySelector('.search-btn').disabled = false;
+
                     // Update channels dropdown
                     const sel = document.getElementById('gameVoiceChannel');
                     const currentVal = sel.value;

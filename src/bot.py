@@ -1364,6 +1364,12 @@ class MusicBot(commands.Cog):
         # Direct start (usually from Web)
         state.game = GuessGame(self, None, seed_song=seed_song, mode=mode)
         
+        # CLEAR QUEUE AND STOP PLAYBACK
+        state.queue = []
+        state.current_track = None
+        if guild.voice_client and guild.voice_client.is_playing():
+            guild.voice_client.stop()
+        
         # Determine notification channel: 1. Set channel, 2. Current ctx, 3. Last interaction, 4. First available
         set_channel_id = server_settings.get(str(guild_id))
         target_channel = None
