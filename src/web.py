@@ -9,7 +9,7 @@ from quart import Quart, jsonify, make_response, redirect, render_template, requ
 import yt_dlp
 
 from config import (
-    CACHE_DIR, PLAYLIST_FILE, YDL_FLAT_OPTS, YDL_PLAYLIST_LOAD_OPTS
+    CACHE_DIR, PLAYLIST_FILE, YDL_FLAT_OPTS, YDL_PLAYLIST_LOAD_OPTS, YDL_SINGLE_OPTS
 )
 from utils import (
     log_error, log_info, save_json, format_time, get_thumbnail_url, 
@@ -473,8 +473,17 @@ async def api_add(guild_id):
         return jsonify({'error': 'Game is active! Cannot add songs.'}), 400
 
     query = data['query']
+    
+    # Strip playlist if video is present
+    if "v=" in query and "list=" in query:
+        query = re.sub(r'([&?])list=[^&]*', '', query)
+
+    mode = data.get('mode', 'song')
+    is_playlist = (mode == 'playlist')
+
     if not re.match(r'^https?://', query):
         query = f"ytsearch1:{query}"
+        is_playlist = False
     
     if not state.last_text_channel:
         state.last_text_channel = guild.text_channels[0]
@@ -491,8 +500,22 @@ async def api_add(guild_id):
                     await channel.connect()
                     break
 
+        if is_playlist:
+             # Just fetch basic info first to get title
+             try:
+                 info_temp = await cog.bot.loop.run_in_executor(None, lambda: yt_dlp.YoutubeDL({'extract_flat': True, 'quiet': True}).extract_info(query, download=False))
+                 title = info_temp.get('title', 'Unknown Playlist')
+                 safe_title = "".join(c for c in title if c.isalnum() or c in (' ', '-', '_')).strip()
+                 if not safe_title: safe_title = f"Playlist-{int(time.time())}"
+                 saved_playlists[safe_title] = {'type': 'live', 'url': query}
+                 save_json(PLAYLIST_FILE, saved_playlists)
+             except: pass
+
+        # Select Options
+        opts = YDL_SINGLE_OPTS if (not is_playlist and 'ytsearch' not in query) else YDL_FLAT_OPTS
+        
         # Use Flat Options (verified working)
-        info = await cog.bot.loop.run_in_executor(None, lambda: yt_dlp.YoutubeDL(YDL_FLAT_OPTS).extract_info(query, download=False))
+        info = await cog.bot.loop.run_in_executor(None, lambda: yt_dlp.YoutubeDL(opts).extract_info(query, download=False))
         
         # 2. Safer clear: Re-check after await
         if state.queue and state.queue[-1].get('suggested'):
@@ -509,10 +532,15 @@ async def api_add(guild_id):
                 'webpage': url
             }
         
+        tracks = []
         if 'entries' in info:
-            state.queue.extend([process(e) for e in info['entries'] if e])
+            tracks = [process(e) for e in info['entries'] if e]
         else:
-            state.queue.append(process(info))
+            tracks = [process(info)]
+            
+        if not tracks: return jsonify({'error': 'No tracks found'}), 404
+
+        state.queue.extend(tracks)
         
         # Ensure autoplay suggestion is at the end
         cog.bot.loop.create_task(cog.ensure_autoplay(guild.id, force=True))
@@ -527,8 +555,9 @@ async def api_add(guild_id):
              
              await cog.play_next(DummyCtx(guild, guild.voice_client))
 
-        return jsonify({'status':'ok'})
-    except Exception:
+        return jsonify({'status':'ok', 'count': len(tracks), 'playlist_saved': is_playlist})
+    except Exception as e:
+        log_error(f"API Add Error: {e}")
         return jsonify({'error':'fail'}), 500
 
 @app.route('/api/<int:guild_id>/game/status')

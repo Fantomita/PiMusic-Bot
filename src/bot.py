@@ -1190,6 +1190,10 @@ class MusicBot(commands.Cog):
 
     @commands.hybrid_command(name="play", aliases=["p"])
     async def play(self, ctx, *, search: str):
+        # Strip playlist if video is present
+        if "v=" in search and "list=" in search:
+            search = re.sub(r'([&?])list=[^&]*', '', search)
+            
         q = search if re.match(r'^https?://', search) else f"ytsearch1:{search}"
         await self.prepare_song(ctx, q)
 
