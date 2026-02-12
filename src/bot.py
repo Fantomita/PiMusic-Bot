@@ -1074,7 +1074,7 @@ class MusicBot(commands.Cog):
                 self.bot.loop.create_task(self.ensure_autoplay(ctx.guild.id))
 
                 # Pre-fetch lyrics for current song in background
-                self.bot.loop.run_in_executor(None, lyrics_manager.get_lyrics, next_song['id'])
+                self.bot.loop.run_in_executor(None, lyrics_manager.get_lyrics, next_song['id'], next_song['title'], next_song['author'])
                 
                 embed = discord.Embed(title="🎶 Now Playing", description=f"**[{next_song['title']}]({next_song['webpage']})**", color=COLOR_MAIN)
                 embed.set_thumbnail(url=f"https://i.ytimg.com/vi/{next_song['id']}/mqdefault.jpg")
@@ -1103,13 +1103,13 @@ class MusicBot(commands.Cog):
         embed.add_field(name="📂 Playlists", value="`/saveplaylist`\n`/loadplaylist`\n`/listplaylists`\n`/delplaylist`", inline=False)
         embed.add_field(name="📜 Queue", value="`/queue`\n`/history`\n`/shuffle`\n`/clear`", inline=False)
         embed.add_field(name="🎮 Games", value="`/guess [search]` - Start song quiz", inline=False)
-        embed.add_field(name="⚙️ Utils", value="`/search`\n`/cache`\n`/dash`", inline=False)
+        embed.add_field(name="⚙️ Utils", value="`/lyrics`\n`/search`\n`/cache`\n`/dash`", inline=False)
         await ctx.send(embed=embed, silent=True)
 
     @commands.command()
     async def sync(self, ctx):
-        await ctx.bot.tree.sync()
-        await ctx.send("✅ Synced! Commands will appear shortly.", silent=True)
+        await ctx.bot.tree.sync(guild=ctx.guild)
+        await ctx.send("✅ Synced commands to this server! They should appear shortly.", silent=True)
 
     @commands.hybrid_command(name="setchannel")
     async def set_channel(self, ctx):
@@ -1149,7 +1149,7 @@ class MusicBot(commands.Cog):
         await ctx.defer()
         
         # Use executor to avoid blocking
-        lyrics = await self.bot.loop.run_in_executor(None, lyrics_manager.get_lyrics, state.current_track['id'])
+        lyrics = await self.bot.loop.run_in_executor(None, lyrics_manager.get_lyrics, state.current_track['id'], state.current_track['title'], state.current_track['author'])
         
         if not lyrics:
             return await ctx.send(f"❌ Could not find lyrics for **{state.current_track['title']}**.", silent=True)

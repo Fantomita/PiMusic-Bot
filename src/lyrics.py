@@ -1,5 +1,7 @@
 import os
 import json
+import requests
+from urllib.parse import quote
 from ytmusicapi import YTMusic
 from config import CACHE_DIR
 from utils import log_error, log_info
@@ -13,7 +15,7 @@ class LyricsManager:
     def get_lyrics_path(self, video_id):
         return os.path.join(CACHE_DIR, f"{video_id}.lyrics")
 
-    def get_lyrics(self, video_id):
+    def get_lyrics(self, video_id, title=None, artist=None):
         """Fetch lyrics for a given YouTube video ID."""
         if not video_id: return None
         
@@ -30,31 +32,37 @@ class LyricsManager:
         try:
             # Get song metadata to find lyrics ID
             song = self.ytmusic.get_song(video_id)
-            if not song or 'videoDetails' not in song:
-                return None
-                
-            browse_id = self.ytmusic.get_watch_playlist(videoId=video_id).get('lyrics')
-            
-            if not browse_id:
-                # Fallback: Try search if direct ID fails (unlikely for YT Music matches but possible)
-                return None
-
-            lyrics_data = self.ytmusic.get_lyrics(browse_id)
-            if lyrics_data and 'lyrics' in lyrics_data:
-                text = lyrics_data['lyrics']
-                
-                # Cache it
-                with open(path, 'w', encoding='utf-8') as f:
-                    f.write(text)
-                
-                log_info(f"📝 Lyrics cached for {video_id}")
-                return text
-                
-        except Exception as e:
-            # Often fails if song has no lyrics or isn't on YT Music
-            # log_error(f"Lyrics fetch failed for {video_id}: {e}")
+            if song and 'videoDetails' in song:
+                browse_id = self.ytmusic.get_watch_playlist(videoId=video_id).get('lyrics')
+                if browse_id:
+                    lyrics_data = self.ytmusic.get_lyrics(browse_id)
+                    if lyrics_data and 'lyrics' in lyrics_data:
+                        text = lyrics_data['lyrics']
+                        with open(path, 'w', encoding='utf-8') as f:
+                            f.write(text)
+                        log_info(f"📝 Lyrics cached (YTM) for {video_id}")
+                        return text
+        except Exception:
             pass
             
+        # 3. Fallback: LRCLIB.NET (Community sourced)
+        if title and artist:
+            try:
+                # Clean up title/artist slightly (remove "Official Video", etc if needed)
+                # But simple is often okay for LRCLIB
+                url = f"https://lrclib.net/api/get?artist_name={quote(artist)}&track_name={quote(title)}"
+                res = requests.get(url, timeout=5)
+                if res.status_code == 200:
+                    data = res.json()
+                    text = data.get('plainLyrics')
+                    if text:
+                        with open(path, 'w', encoding='utf-8') as f:
+                            f.write(text)
+                        log_info(f"📝 Lyrics cached (LRCLIB) for {video_id}")
+                        return text
+            except Exception:
+                pass
+                
         return None
 
 # Singleton instance
