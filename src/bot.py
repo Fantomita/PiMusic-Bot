@@ -183,27 +183,29 @@ class GuessGameView(ui.View):
 
     @ui.button(label="+5s", emoji="➕", style=discord.ButtonStyle.blurple)
     async def more_time(self, interaction, button):
-        if not self.game.active or self.game.transitioning: return
         await interaction.response.defer()
+        if not self.game.active or self.game.transitioning: return
         await self.game.play_segment(extra=5)
 
     @ui.button(label="Rehear", emoji="👂", style=discord.ButtonStyle.secondary)
     async def rehear(self, interaction, button):
-        if not self.game.active or self.game.transitioning: return
         await interaction.response.defer()
+        if not self.game.active or self.game.transitioning: return
         await self.game.play_segment(extra=0)
 
     @ui.button(label="Skip / Reveal", emoji="⏭️", style=discord.ButtonStyle.gray)
     async def skip_song(self, interaction, button):
+        await interaction.response.defer()
         if not self.game.active or self.game.transitioning: return
         # Immediate stop and transition
         await self.game.trigger_transition(reveal=True)
-        await interaction.response.defer()
 
     @ui.button(label="End Game", emoji="🛑", style=discord.ButtonStyle.danger)
     async def end_game(self, interaction, button):
+        await interaction.response.defer()
         await self.game.stop()
-        await interaction.response.send_message("🛑 Game ended.")
+        # Notification is already sent by stop() or manually if needed
+        # stop() sends Final Scores.
 
 class GuessGame:
     """Logic for Guess the Song game."""
@@ -320,10 +322,11 @@ class GuessGame:
                 await asyncio.sleep(2.5) # Time to see the reveal
 
             # Cleanup message if it exists
-            if self.message:
-                try: await self.message.delete()
+            msg_to_delete = self.message
+            self.message = None
+            if msg_to_delete:
+                try: await msg_to_delete.delete()
                 except: pass
-                self.message = None
 
             self.transitioning = False # Reset for next song
             await self.next_song()
@@ -463,25 +466,30 @@ class GuessGame:
 
     async def process_web_guess(self, user_name, guess_text):
         """Web handler for guesses."""
-        is_correct = await self.validate_guess(guess_text)
-        self.add_to_history('guess', user_name, guess_text, is_correct)
-        
-        # Mirror guess to Discord
         try:
-            icon = "✅" if is_correct else "❌"
-            await self.ctx.send(f"🌐 **{user_name}** (Web): {guess_text} {icon}")
-        except: pass
-
-        if is_correct:
-            # Create a dummy user object for the winner
-            class WebUser:
-                def __init__(self, name):
-                    self.id = f"web_{name}"
-                    self.display_name = f"{name} (Web)"
+            is_correct = await self.validate_guess(guess_text)
+            self.add_to_history('guess', user_name, guess_text, is_correct)
             
-            await self.trigger_transition(winner=WebUser(user_name))
-            return True
-        return False
+            # Mirror guess to Discord
+            try:
+                icon = "✅" if is_correct else "❌"
+                await self.ctx.send(f"🌐 **{user_name}** (Web): {guess_text} {icon}")
+            except Exception as e:
+                log_error(f"Failed to mirror web guess to Discord: {e}")
+
+            if is_correct:
+                # Create a dummy user object for the winner
+                class WebUser:
+                    def __init__(self, name):
+                        self.id = f"web_{name}"
+                        self.display_name = f"{name} (Web)"
+                
+                await self.trigger_transition(winner=WebUser(user_name))
+                return True
+            return False
+        except Exception as e:
+            log_error(f"Error in process_web_guess: {e}")
+            return False
 
     async def stop(self):
         self.active = False
