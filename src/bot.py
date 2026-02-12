@@ -36,7 +36,6 @@ from utils import (
     log_error, log_info, load_json, save_json, format_time, 
     enforce_cache_limit, get_thumbnail_url, cache_map, saved_playlists, server_settings
 )
-from lyrics import lyrics_manager
 
 # ==========================================
 # 1. SETUP & CONFIGURATION
@@ -1072,9 +1071,6 @@ class MusicBot(commands.Cog):
                 
                 # Trigger autoplay prefetch for the NEXT song
                 self.bot.loop.create_task(self.ensure_autoplay(ctx.guild.id))
-
-                # Pre-fetch lyrics for current song in background
-                self.bot.loop.run_in_executor(None, lyrics_manager.get_lyrics, next_song['id'], next_song['title'], next_song['author'])
                 
                 embed = discord.Embed(title="🎶 Now Playing", description=f"**[{next_song['title']}]({next_song['webpage']})**", color=COLOR_MAIN)
                 embed.set_thumbnail(url=f"https://i.ytimg.com/vi/{next_song['id']}/mqdefault.jpg")
@@ -1103,7 +1099,7 @@ class MusicBot(commands.Cog):
         embed.add_field(name="📂 Playlists", value="`/saveplaylist`\n`/loadplaylist`\n`/listplaylists`\n`/delplaylist`", inline=False)
         embed.add_field(name="📜 Queue", value="`/queue`\n`/history`\n`/shuffle`\n`/clear`", inline=False)
         embed.add_field(name="🎮 Games", value="`/guess [search]` - Start song quiz", inline=False)
-        embed.add_field(name="⚙️ Utils", value="`/lyrics`\n`/search`\n`/cache`\n`/dash`", inline=False)
+        embed.add_field(name="⚙️ Utils", value="`/search`\n`/cache`\n`/dash`", inline=False)
         await ctx.send(embed=embed, silent=True)
 
     @commands.command()
@@ -1139,28 +1135,6 @@ class MusicBot(commands.Cog):
             await ctx.send(embed=embed, view=view, silent=True)
         else:
             await ctx.send("❌ Could not start Cloudflare Tunnel. Check logs.", silent=True)
-
-    @commands.hybrid_command(name="lyrics")
-    async def lyrics_cmd(self, ctx):
-        state = self.get_state(ctx.guild.id)
-        if not state.current_track:
-            return await ctx.send("❌ No song is currently playing.", silent=True)
-            
-        await ctx.defer()
-        
-        # Use executor to avoid blocking
-        lyrics = await self.bot.loop.run_in_executor(None, lyrics_manager.get_lyrics, state.current_track['id'], state.current_track['title'], state.current_track['author'])
-        
-        if not lyrics:
-            return await ctx.send(f"❌ Could not find lyrics for **{state.current_track['title']}**.", silent=True)
-            
-        # Split into chunks (Discord limit 4096)
-        chunks = [lyrics[i:i+3000] for i in range(0, len(lyrics), 3000)]
-        
-        for i, chunk in enumerate(chunks):
-            title = f"📜 Lyrics: {state.current_track['title']}" if i == 0 else ""
-            embed = discord.Embed(title=title, description=chunk, color=COLOR_MAIN)
-            await ctx.send(embed=embed, silent=True)
 
     @commands.hybrid_command(name="play", aliases=["p"])
     async def play(self, ctx, *, search: str):
