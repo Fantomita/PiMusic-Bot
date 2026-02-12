@@ -563,8 +563,10 @@
                         
                         <div id="game-input-area">
                             <input type="text" class="pl-input" id="guessInput" placeholder="Type your guess here..." style="margin-bottom:10px; text-align:center; font-size:1.2rem;" onkeypress="handleGuess(event)">
-                            <input type="text" class="pl-input" id="playerName" placeholder="Your Name" style="margin-bottom:10px; width: 50%; display:inline-block;" value="Guest">
-                            <button class="btn-save" onclick="sendGuess()" style="width: auto; padding: 12px 30px; margin-bottom: 20px;">🚀 Guess</button>
+                            <div style="display:flex; gap:10px; margin-bottom:10px;">
+                                <input type="text" class="pl-input" id="playerName" placeholder="Your Name" value="Guest">
+                                <button class="btn-save" onclick="sendGuess()" style="width: auto; padding: 12px 30px;">🚀 Guess</button>
+                            </div>
                         </div>
                         
                         <div class="controls" style="margin-bottom: 20px;">
@@ -577,10 +579,17 @@
                         <div id="guess-feedback" style="height: 20px; margin-top: 10px; font-weight: bold;"></div>
                     </div>
 
-                    <div class="stats-grid" style="grid-template-columns: 1fr;">
-                        <div class="stat-card" style="text-align: left; padding: 20px;">
-                            <div class="stat-label" style="margin-bottom: 10px; font-size: 0.9rem;">🏆 LEADERBOARD</div>
-                            <div id="game-scores"></div>
+                    <div style="display: grid; grid-template-columns: 1fr 300px; gap: 20px; margin-top: 20px;">
+                        <!-- Chat History -->
+                        <div class="stat-card" style="text-align: left; padding: 0; display: flex; flex-direction: column; height: 400px; overflow: hidden;">
+                            <div class="stat-label" style="padding: 15px; border-bottom: 1px solid var(--border);">💬 GAME HISTORY</div>
+                            <div id="game-history" style="flex: 1; overflow-y: auto; padding: 15px; display: flex; flex-direction: column; gap: 8px;"></div>
+                        </div>
+
+                        <!-- Leaderboard -->
+                        <div class="stat-card" style="text-align: left; padding: 0; height: 400px; overflow: hidden; display: flex; flex-direction: column;">
+                            <div class="stat-label" style="padding: 15px; border-bottom: 1px solid var(--border);">🏆 LEADERBOARD</div>
+                            <div id="game-scores" style="flex: 1; overflow-y: auto; padding: 15px;"></div>
                         </div>
                     </div>
                 </div>
@@ -590,12 +599,19 @@
                     <div class="pl-tools" style="text-align:center;">
                         <h2 style="margin:0 0 20px 0; color:var(--primary);">Start a New Game</h2>
                         <input type="text" class="pl-input" id="gameSearch" placeholder="Seed Song (Optional, e.g. manele)" style="margin-bottom:15px; text-align:center;">
+                        
+                        <div style="margin-bottom: 15px;">
+                            <label style="display:block; font-size:0.7rem; color:var(--text-muted); margin-bottom:5px; text-transform:uppercase; font-weight:700;">Voice Channel</label>
+                            <select id="gameVoiceChannel" class="pl-input" style="text-align:center; appearance: none; cursor:pointer;">
+                                <option value="">Select Channel...</option>
+                            </select>
+                        </div>
+
                         <div style="display:grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-bottom: 20px;">
                             <button class="btn-save" style="padding:15px 5px; font-size:0.8rem;" onclick="startGame('title')">🎵 Title</button>
                             <button class="btn-save" style="padding:15px 5px; font-size:0.8rem;" onclick="startGame('author')">🎤 Artist</button>
                             <button class="btn-save" style="padding:15px 5px; font-size:0.8rem;" onclick="startGame('both')">📀 Both</button>
                         </div>
-                        <p style="color:var(--text-muted); font-size:0.9rem;">The bot will join your current voice channel.</p>
                     </div>
                 </div>
             </div>
@@ -720,21 +736,58 @@
                     
                     document.getElementById('game-status').innerText = `Mode: Guess the ${data.mode.toUpperCase()} | Playing: ${data.round_duration}s`;
                     
+                    // Leaderboard
                     const scoreList = document.getElementById('game-scores');
                     scoreList.innerHTML = '';
                     if (data.scores.length === 0) {
-                        scoreList.innerHTML = '<div style="color:var(--text-muted);">No scores yet!</div>';
+                        scoreList.innerHTML = '<div style="color:var(--text-muted); padding: 15px;">No scores yet!</div>';
                     } else {
                         data.scores.forEach((s, i) => {
                             const row = document.createElement('div');
                             row.style.display = 'flex';
                             row.style.justifyContent = 'space-between';
-                            row.style.padding = '8px';
+                            row.style.padding = '8px 15px';
                             row.style.borderBottom = '1px solid var(--border)';
                             row.innerHTML = `<span>${i+1}. ${s.name}</span> <span style="font-weight:bold; color:var(--primary);">${s.score} pts</span>`;
                             scoreList.appendChild(row);
                         });
                     }
+
+                    // History (Chat)
+                    const historyDiv = document.getElementById('game-history');
+                    const shouldScroll = Math.abs(historyDiv.scrollHeight - historyDiv.scrollTop - historyDiv.clientHeight) < 50;
+                    historyDiv.innerHTML = '';
+                    
+                    if (data.history) {
+                        data.history.forEach(item => {
+                            const div = document.createElement('div');
+                            div.style.padding = '6px 10px';
+                            div.style.borderRadius = '8px';
+                            div.style.fontSize = '0.9rem';
+                            
+                            if (item.type === 'guess') {
+                                div.style.background = 'rgba(255,255,255,0.03)';
+                                div.innerHTML = `<span style="color:var(--text-muted); font-size:0.7rem;">[${item.time}]</span> <span style="font-weight:700;">${item.user}:</span> ${item.text}`;
+                                if (item.correct) {
+                                    div.style.borderLeft = '4px solid #2ecc71';
+                                    div.style.background = 'rgba(46, 204, 113, 0.1)';
+                                }
+                            } else {
+                                div.style.background = 'rgba(255, 215, 0, 0.05)';
+                                div.style.color = 'var(--primary)';
+                                div.style.fontStyle = 'italic';
+                                div.style.textAlign = 'center';
+                                div.innerHTML = item.text;
+                                if (item.user === 'SONG_INFO') {
+                                    div.style.background = 'rgba(255, 255, 255, 0.05)';
+                                    div.style.color = '#fff';
+                                    div.style.fontWeight = '700';
+                                }
+                            }
+                            historyDiv.appendChild(div);
+                        });
+                    }
+                    if (shouldScroll) historyDiv.scrollTop = historyDiv.scrollHeight;
 
                     if(data.transitioning) {
                          document.getElementById('guess-feedback').innerText = "🎉 Correct! Next song coming...";
@@ -754,20 +807,41 @@
                     startUI.style.display = 'block';
                     gameBtn.style.color = 'var(--text-muted)';
                     gameActive = false;
+                    
+                    // Update channels dropdown
+                    const sel = document.getElementById('gameVoiceChannel');
+                    const currentVal = sel.value;
+                    sel.innerHTML = '<option value="">Select Channel...</option>';
+                    if (data.channels) {
+                        data.channels.forEach(ch => {
+                            const opt = document.createElement('option');
+                            opt.value = ch.id;
+                            opt.innerText = ch.name;
+                            if (ch.id === currentVal) opt.selected = true;
+                            sel.appendChild(opt);
+                        });
+                    }
                 }
             } catch (e) {}
         }
 
         async function startGame(mode) {
             const search = document.getElementById('gameSearch').value;
+            const voiceId = document.getElementById('gameVoiceChannel').value;
+            
+            if (!voiceId) return alert("Please select a voice channel!");
+
             const res = await fetch(`/api/${guild_id}/game/start`, {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({ search: search, mode: mode })
+                body: JSON.stringify({ search: search, mode: mode, voice_channel_id: voiceId })
             });
             const data = await res.json();
             if (data.error) alert(data.error);
-            else fetchGameStatus();
+            else {
+                document.getElementById('gameSearch').value = '';
+                fetchGameStatus();
+            }
         }
 
         async function gameControl(action) {

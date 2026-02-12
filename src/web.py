@@ -513,8 +513,15 @@ async def api_game_status(guild_id):
     if not guild or not cog: return jsonify({'active': False})
     
     state = cog.get_state(guild.id)
+    
+    # Also return voice channels if no game active
+    vcs = []
     if not state.game or not state.game.active:
-        return jsonify({'active': False})
+        for vc in guild.voice_channels:
+            vcs.append({'id': str(vc.id), 'name': vc.name})
+            
+    if not state.game or not state.game.active:
+        return jsonify({'active': False, 'channels': vcs})
         
     g = state.game
     # Clean scores for JSON
@@ -534,7 +541,8 @@ async def api_game_status(guild_id):
         'mode': g.mode,
         'round_duration': g.play_duration,
         'scores': scores,
-        'transitioning': g.transitioning
+        'transitioning': g.transitioning,
+        'history': g.history
     })
 
 @app.route('/api/<int:guild_id>/game/guess', methods=['POST'])
@@ -561,12 +569,13 @@ async def api_game_start(guild_id):
     data = await request.get_json()
     search = data.get('search', '').strip() or None
     mode = data.get('mode', 'title').strip()
+    voice_id = data.get('voice_channel_id')
     
     guild = get_target_guild(guild_id)
     cog = get_bot_cog()
     if not guild or not cog: return jsonify({'error': 'No guild'}), 400
     
-    success, message = await cog.start_game_logic(guild.id, search=search, mode=mode)
+    success, message = await cog.start_game_logic(guild.id, search=search, mode=mode, voice_channel_id=voice_id)
     if success:
         return jsonify({'status': 'ok'})
     else:

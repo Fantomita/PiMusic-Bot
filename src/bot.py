@@ -223,6 +223,17 @@ class GuessGame:
         self.transitioning = False
         self.lock = asyncio.Lock()
         self.played_ids = set()
+        self.history = [] # List of {type: 'guess'|'event', user: str, text: str, correct: bool}
+
+    def add_to_history(self, event_type, user, text, correct=False):
+        self.history.append({
+            'type': event_type,
+            'user': user,
+            'text': text,
+            'correct': correct,
+            'time': datetime.datetime.now().strftime("%H:%M:%S")
+        })
+        if len(self.history) > 50: self.history.pop(0)
 
     def remove_diacritics(self, text):
         """Removes Romanian diacritics and other accents."""
@@ -288,10 +299,15 @@ class GuessGame:
             if reveal or winner:
                 if winner:
                     self.scores[winner.id] = self.scores.get(winner.id, 0) + 1
-                    embed = discord.Embed(title="🎉 Correct!", description=f"**{winner.display_name}** got it!\n\nIt was: **{self.current_song['title']}**\nBy: **{self.current_song['author']}**", color=discord.Color.green())
+                    msg_text = f"**{winner.display_name}** got it! It was: **{self.current_song['title']}** by **{self.current_song['author']}**"
+                    embed = discord.Embed(title="🎉 Correct!", description=msg_text, color=discord.Color.green())
+                    self.add_to_history('event', 'SYSTEM', f"🎉 {winner.display_name} guessed correctly!", True)
                 else:
-                    embed = discord.Embed(title="⏭️ Skipped", description=f"It was: **{self.current_song['title']}**\nBy: **{self.current_song['author']}**", color=discord.Color.orange())
+                    msg_text = f"It was: **{self.current_song['title']}** by **{self.current_song['author']}**"
+                    embed = discord.Embed(title="⏭️ Skipped", description=msg_text, color=discord.Color.orange())
+                    self.add_to_history('event', 'SYSTEM', "⏭️ Song skipped.")
                 
+                self.add_to_history('event', 'SONG_INFO', f"🎵 Last song: {self.current_song['title']} - {self.current_song['author']}")
                 embed.set_thumbnail(url=f"https://i.ytimg.com/vi/{self.current_song['id']}/mqdefault.jpg")
                 await self.ctx.send(embed=embed)
                 await asyncio.sleep(2.5) # Time to see the reveal
@@ -431,13 +447,19 @@ class GuessGame:
         """Discord message handler for guesses."""
         if not self.active or message.channel.id != self.ctx.channel.id: return
         
-        if await self.validate_guess(message.content):
+        is_correct = await self.validate_guess(message.content)
+        self.add_to_history('guess', message.author.display_name, message.content, is_correct)
+        
+        if is_correct:
             await message.add_reaction("✅")
             await self.trigger_transition(winner=message.author)
 
     async def process_web_guess(self, user_name, guess_text):
         """Web handler for guesses."""
-        if await self.validate_guess(guess_text):
+        is_correct = await self.validate_guess(guess_text)
+        self.add_to_history('guess', user_name, guess_text, is_correct)
+        
+        if is_correct:
             # Create a dummy user object for the winner
             class WebUser:
                 def __init__(self, name):
@@ -1231,10 +1253,30 @@ class MusicBot(commands.Cog):
         # This logic is now shared
         await self.start_game_logic(ctx.guild.id, search, ctx=ctx)
 
-    async def start_game_logic(self, guild_id, search=None, mode=None, ctx=None):
+    async def start_game_logic(self, guild_id, search=None, mode=None, ctx=None, voice_channel_id=None):
         """Shared logic to initialize and start a guess game."""
         state = self.get_state(guild_id)
+        guild = self.bot.get_guild(guild_id)
         
+        # 1. Handle Voice Joining
+        if not guild.voice_client:
+            target_vc = None
+            if voice_channel_id:
+                target_vc = guild.get_channel(int(voice_channel_id))
+            elif ctx and ctx.author.voice:
+                target_vc = ctx.author.voice.channel
+            
+            if target_vc:
+                try: await target_vc.connect()
+                except Exception as e:
+                    msg = f"❌ Could not join voice: {e}"
+                    if ctx: await ctx.send(msg)
+                    return False, msg
+            else:
+                msg = "❌ Please join a voice channel or select one."
+                if ctx: await ctx.send(msg)
+                return False, msg
+
         seed_song = None
         if search:
             try:
@@ -1265,8 +1307,6 @@ class MusicBot(commands.Cog):
                     return False, msg
 
         if mode is None:
-            # If no mode, we must be in Discord to show the selection view, 
-            # or the web will have its own selection.
             if ctx:
                 embed = discord.Embed(title="🎮 Guess Game", description="Choose the type of the game you want to play:", color=COLOR_MAIN)
                 if seed_song: embed.set_footer(text=f"Based on: {seed_song['title']}")
@@ -1276,18 +1316,21 @@ class MusicBot(commands.Cog):
                 return False, "Mode required for direct start"
 
         # Direct start (usually from Web)
-        state.game = GuessGame(self, ctx or type('DummyCtx', (), {'guild': self.bot.get_guild(guild_id), 'voice_client': self.bot.get_guild(guild_id).voice_client, 'channel': None, 'send': lambda m, **k: asyncio.sleep(0)})(), seed_song=seed_song, mode=mode)
-        # Handle the case where ctx is missing but we need it for sending game messages
-        if not ctx:
-            # Find a text channel to send game messages to
-            target_channel = state.last_text_channel or self.bot.get_guild(guild_id).text_channels[0]
-            state.game.ctx = type('WebCtx', (), {
-                'guild': self.bot.get_guild(guild_id),
-                'voice_client': self.bot.get_guild(guild_id).voice_client,
-                'channel': target_channel,
-                'author': self.bot.user,
-                'send': lambda *args, **kwargs: target_channel.send(*args, **kwargs)
-            })()
+        state.game = GuessGame(self, None, seed_song=seed_song, mode=mode)
+        
+        # Determine notification channel
+        target_channel = (ctx.channel if ctx else None) or state.last_text_channel or (guild.text_channels[0] if guild.text_channels else None)
+        
+        if not target_channel:
+             return False, "No text channel found for messages."
+
+        state.game.ctx = type('WebCtx', (), {
+            'guild': guild,
+            'voice_client': guild.voice_client,
+            'channel': target_channel,
+            'author': self.bot.user,
+            'send': lambda *args, **kwargs: target_channel.send(*args, **kwargs)
+        })()
 
         await state.game.start()
         return True, "Game started"
