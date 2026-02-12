@@ -8,7 +8,6 @@ import datetime
 import difflib
 import logging
 import os
-import unicodedata
 import platform
 import random
 import re
@@ -17,6 +16,7 @@ import stat
 import subprocess
 import sys
 import time
+import unicodedata
 from uuid import uuid4
 
 import discord
@@ -75,6 +75,7 @@ class ServerState:
         self.last_text_channel = None 
         self.game = None
 
+
 class SelectionMenu(ui.Select):
     """Dropdown menu for search results."""
     def __init__(self, entries, cog, ctx):
@@ -91,6 +92,7 @@ class SelectionMenu(ui.Select):
         await interaction.response.edit_message(content="✅ **Confirmed.**", view=None)
         await self.cog.prepare_song(self.ctx, self.values[0])
 
+
 class SelectionView(ui.View):
     """View container for the selection menu."""
     def __init__(self, entries, cog, ctx):
@@ -106,11 +108,13 @@ class SelectionView(ui.View):
                 await self.message.edit(content="⌛ **Search expired.**", view=self)
         except: pass
 
+
 class MusicControlView(ui.View):
     """Persistent buttons for the 'Now Playing' message."""
     def __init__(self, cog, guild_id):
         super().__init__(timeout=None)
         self.cog, self.guild_id = cog, guild_id
+
     @ui.button(emoji="⏯️", style=discord.ButtonStyle.blurple)
     async def play_pause(self, interaction, button):
         vc = interaction.guild.voice_client
@@ -118,10 +122,12 @@ class MusicControlView(ui.View):
             if vc.is_paused(): vc.resume()
             elif vc.is_playing(): vc.pause()
         await interaction.response.defer()
+
     @ui.button(emoji="⏭️", style=discord.ButtonStyle.secondary)
     async def skip(self, interaction, button):
         if interaction.guild.voice_client: interaction.guild.voice_client.stop()
         await interaction.response.defer()
+
     @ui.button(emoji="🔀", style=discord.ButtonStyle.secondary)
     async def shuffle(self, interaction, button):
         state = self.cog.get_state(self.guild_id)
@@ -130,6 +136,7 @@ class MusicControlView(ui.View):
         random.shuffle(user_queue)
         state.queue[:] = user_queue + suggested
         await interaction.response.send_message("🔀 Shuffled queue!", ephemeral=True, silent=True)
+
     @ui.button(emoji="📋", style=discord.ButtonStyle.gray)
     async def q_btn(self, interaction, button):
         state = self.cog.get_state(self.guild_id)
@@ -137,10 +144,12 @@ class MusicControlView(ui.View):
             return await interaction.response.send_message("Queue empty!", ephemeral=True, silent=True)
         view = ListPaginator(state.queue, title="Server Queue", is_queue=True, current=state.current_track)
         await interaction.response.send_message(embed=view.get_embed(), view=view, ephemeral=True, silent=True)
+
     @ui.button(emoji="⏹️", style=discord.ButtonStyle.danger)
     async def stop_btn(self, interaction, button):
         await self.cog.stop_logic(self.guild_id)
         await interaction.response.send_message("👋 Stopping & Saving...", ephemeral=True, silent=True)
+
 
 class GuessModeSelectView(ui.View):
     """View to select the game mode for the Guess game."""
@@ -175,6 +184,7 @@ class GuessModeSelectView(ui.View):
         state.game = GuessGame(self.cog, self.ctx, seed_song=self.seed_song, mode=mode)
         await state.game.start()
 
+
 class GuessGameView(ui.View):
     """Buttons for the Guess the Song game."""
     def __init__(self, game):
@@ -204,8 +214,7 @@ class GuessGameView(ui.View):
     async def end_game(self, interaction, button):
         await interaction.response.defer()
         await self.game.stop()
-        # Notification is already sent by stop() or manually if needed
-        # stop() sends Final Scores.
+
 
 class GuessGame:
     """Logic for Guess the Song game."""
@@ -227,6 +236,7 @@ class GuessGame:
         self.played_ids = set()
         self.history = [] # List of {type: 'guess'|'event', user: str, text: str, correct: bool}
         self.last_reveal = None # Stores {title: str, author: str, id: str} for display between rounds
+        self.current_start_time = None # Random start time for current song segment
 
     def add_to_history(self, event_type, user, text, correct=False):
         self.history.append({
