@@ -1193,14 +1193,9 @@ class MusicBot(commands.Cog):
         view = ListPaginator(list(reversed(state.history)), title="History", is_queue=False)
         await ctx.send(embed=view.get_embed(), view=view, silent=True)
 
-    @commands.hybrid_command(name="guess", description="Start a 'Guess the Song' quiz. Usage: /guess [search] [mode: title/author/both]")
-    @app_commands.describe(search="A song to base the quiz on (uses Autoplay)", mode="What to guess: 'title', 'author', or 'both'")
-    @app_commands.choices(mode=[
-        app_commands.Choice(name="Guess the Title", value="title"),
-        app_commands.Choice(name="Guess the Author", value="author"),
-        app_commands.Choice(name="Guess Both (Artist - Title)", value="both")
-    ])
-    async def guess_command(self, ctx, search: str = None, mode: str = None):
+    @commands.hybrid_command(name="guess", description="Start a 'Guess the Song' quiz. Usage: /guess [search]")
+    @app_commands.describe(search="A song to base the quiz on (uses Autoplay)")
+    async def guess_command(self, ctx, *, search: str = None):
         state = self.get_state(ctx.guild.id)
         if state.game:
             return await ctx.send("❌ A game is already in progress!", ephemeral=True)
@@ -1236,16 +1231,13 @@ class MusicBot(commands.Cog):
                     vid_id = random.choice(valid_cached)
                     seed_song = {'id': vid_id, 'title': cache_map.get(vid_id, 'Unknown'), 'author': 'Unknown'}
                 else:
-                    return await ctx.send("❌ Please provide a song name to start the quiz (e.g. `/guess search:manele`).")
+                    return await ctx.send("❌ Please provide a song name to start the quiz (e.g. `/guess manele`).")
 
-        if mode is None:
-            embed = discord.Embed(title="🎮 Guess Game", description="Choose the type of the game you want to play:", color=COLOR_MAIN)
-            if seed_song:
-                embed.set_footer(text=f"Based on: {seed_song['title']}")
-            return await ctx.send(embed=embed, view=GuessModeSelectView(self, ctx, seed_song))
-
-        state.game = GuessGame(self, ctx, seed_song=seed_song, mode=mode)
-        await state.game.start()
+        embed = discord.Embed(title="🎮 Guess Game", description="Choose the type of the game you want to play:", color=COLOR_MAIN)
+        if seed_song:
+            embed.set_footer(text=f"Based on: {seed_song['title']}")
+        
+        await ctx.send(embed=embed, view=GuessModeSelectView(self, ctx, seed_song))
 
     @commands.hybrid_command(name="autoplay")
     async def autoplay(self, ctx):
