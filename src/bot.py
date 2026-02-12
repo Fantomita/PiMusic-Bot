@@ -328,8 +328,9 @@ class GuessGame:
                 try: await msg_to_delete.delete()
                 except: pass
 
-            self.transitioning = False # Reset for next song
-            await self.next_song()
+        # Lock released. transitioning is still True, preventing re-entry.
+        # next_song() will reset transitioning to False after fetching/preparing.
+        await self.next_song()
 
     async def next_song(self):
         if not self.active: return
