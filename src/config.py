@@ -9,6 +9,15 @@ TOKEN = os.getenv('DISCORD_TOKEN')
 cookies = os.getenv('YOUTUBE_COOKIES')
 if cookies:
     try:
+        import base64
+        # Check if it looks like Base64 (no spaces, certain characters)
+        if " " not in cookies.strip() and len(cookies) > 100:
+            try:
+                decoded = base64.b64decode(cookies).decode('utf-8')
+                cookies = decoded
+            except:
+                pass # Fallback to plain text if decoding fails
+
         with open('cookies.txt', 'w') as f:
             f.write(cookies)
     except Exception:
@@ -38,7 +47,9 @@ COMMON_YDL_ARGS = {
     'quiet': True,
     'no_warnings': True,
     'noplaylist': True,
-    'socket_timeout': 30
+    'socket_timeout': 30,
+    'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    'referer': 'https://www.youtube.com/'
 }
 
 if os.path.exists('cookies.txt'):
