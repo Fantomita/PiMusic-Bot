@@ -60,6 +60,37 @@ Create a `.env` file in the root directory and add your bot token:
 DISCORD_TOKEN=your_discord_bot_token_here
 ```
 
+### 🌍 Environment Variables
+
+The bot can be configured using the following environment variables:
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `DISCORD_TOKEN` | Your Discord Bot Token (Required) | None |
+| `PORT` | Port for the Web Dashboard | `5000` |
+| `PUBLIC_URL` | Pre-defined URL for the dashboard (e.g. Koyeb URL) | `None` (Uses Cloudflared) |
+| `MAX_CACHE_SIZE_GB` | Maximum size of the music cache in GB | `16` |
+
+## 🐳 Deployment
+
+### Docker
+
+You can run the bot using Docker. This is the easiest way to ensure all dependencies (FFmpeg, etc.) are correctly installed.
+
+```bash
+docker build -t pimusic-bot .
+docker run -e DISCORD_TOKEN="your_token" -p 8080:8080 pimusic-bot
+```
+
+### Koyeb (Free Tier)
+
+This bot is optimized for deployment on [Koyeb](https://www.koyeb.com/).
+
+1. Create a new **Service** from your GitHub repository.
+2. Set `DISCORD_TOKEN` in the environment variables.
+3. (Optional) Set `PUBLIC_URL` to your Koyeb app URL (e.g., `https://my-bot-xyz.koyeb.app`) to disable automatic Cloudflare tunneling.
+4. The bot will automatically use the correct port and start the web dashboard.
+
 ## 🎮 Usage
 
 Run the bot using:

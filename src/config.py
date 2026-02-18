@@ -10,7 +10,7 @@ CACHE_DIR = './music_cache'
 CACHE_MAP_FILE = 'cache_map.json'
 PLAYLIST_FILE = 'playlists.json'
 SETTINGS_FILE = 'server_settings.json'
-MAX_CACHE_SIZE_GB = 16
+MAX_CACHE_SIZE_GB = int(os.getenv('MAX_CACHE_SIZE_GB', 16))
 
 # Audio Settings
 COLOR_MAIN = 0xFFD700  # Gold
