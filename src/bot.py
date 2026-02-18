@@ -1508,6 +1508,16 @@ async def on_ready():
         log_error(f"Sync error: {e}")
 
 async def main():
+    # Write cookies from env if present
+    cookies = os.getenv('YOUTUBE_COOKIES')
+    if cookies:
+        try:
+            with open('cookies.txt', 'w') as f:
+                f.write(cookies)
+            log_info("🍪 Cookies loaded from environment.")
+        except Exception as e:
+            log_error(f"❌ Failed to write cookies: {e}")
+
     try:
         async with bot:
             await bot.add_cog(MusicBot(bot))
