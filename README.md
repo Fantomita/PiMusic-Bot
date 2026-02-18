@@ -2,132 +2,90 @@
 
 > **High-performance Discord Music Bot with a real-time Web Dashboard and Local Caching.**
 
-A feature-rich Discord Music Bot featuring a built-in Web Dashboard, local caching for performance, and seamless Cloudflare Tunneling. Optimized for Raspberry Pi and low-resource environments.
+A feature-rich Discord Music Bot featuring a built-in Web Dashboard, local caching for performance, and seamless Cloudflare Tunneling. Optimized for both **Raspberry Pi** and **Cloud Environments (Koyeb)**.
 
 ## 🚀 Features
 
-- **High-Quality Audio:** Powered by `yt-dlp` and `ffmpeg` for smooth playback.
-- **Responsive Web Dashboard:** Control playback, search songs, and manage the queue from any browser.
-  - *Responsive Design:* Optimized interface for both Desktop ("Command Center" view) and Mobile devices.
-  - *Tunneling:* Automatically uses **Cloudflare Tunnel** to expose the dashboard securely. Starts automatically on boot, so your link is ready when you need it.
-- **Local Caching:** Automatically saves played tracks to disk (`./music_cache`) to save bandwidth and prevent re-downloading.
-  - *Non-Blocking I/O:* Cache cleanup and file operations run in background threads to prevent audio stutters on slow storage (SD Cards).
-- **Smart Playlists:** Save your current queue as a playlist or load existing YouTube playlists.
-- **Auto-Play:** Keeps the music going with related track suggestions when the queue ends.
-- **Guess the Song:** Interactive song quiz game with multiple modes (Title, Artist, or Both).
-- **System Stats:** Monitor CPU, RAM, and Temperature (optimized for Raspberry Pi).
+- **High-Quality Audio:** Powered by `yt-dlp` and `ffmpeg` with optimized buffering.
+- **Responsive Web Dashboard:** Control playback and manage the queue from any browser.
+- **Smart Tunneling:** Automatically uses Cloudflare Tunnel (on RPi) or direct public URLs (on Cloud) for dashboard access.
+- **Local Caching:** Automatically saves played tracks to disk to save bandwidth.
+- **YouTube Bypass:** Built-in support for YouTube cookies to bypass bot detection in data centers.
+- **Interactive Games:** Includes a "Guess the Song" quiz game.
 
-## 🛠️ Installation
+---
 
-### 1. Prerequisites
+## 🛠️ Deployment Methods
 
-- **Python 3.8+**
-- **FFmpeg**: Required for audio transcoding.
-  ```bash
-  sudo apt update && sudo apt install ffmpeg -y
-  ```
+Choose the method that fits your needs.
 
-### 2. Clone the Repository
+### Option A: Raspberry Pi (Local)
+*Best for: 24/7 home use, zero cost, and easier YouTube access.*
 
-```bash
-git clone https://github.com/yourusername/PiMusic-Bot.git
-cd PiMusic-Bot
-```
+1. **Install FFmpeg:**
+   ```bash
+   sudo apt update && sudo apt install ffmpeg -y
+   ```
+2. **Clone & Install:**
+   ```bash
+   git clone https://github.com/Fantomita/PiMusic-Bot.git
+   cd PiMusic-Bot
+   pip install -r requirements.txt
+   pip install uvloop  # Highly recommended for RPi Zero 2W
+   ```
+3. **Configure:**
+   Create a `.env` file:
+   ```ini
+   DISCORD_TOKEN=your_token
+   ```
+4. **Run:**
+   ```bash
+   python src/bot.py
+   ```
+   *Note: On first run, the bot will automatically download the `cloudflared` binary for your Pi's architecture.*
 
-### 3. Install Dependencies
+### Option B: Koyeb / Docker (Cloud)
+*Best for: High uptime, no hardware needed, and remote management.*
 
-It is recommended to use a virtual environment:
+1. **Koyeb Setup:** Create a new **Web Service** from your GitHub repository.
+2. **Environment Variables:** Set the following in the Koyeb Dashboard:
+   - `DISCORD_TOKEN`: Your bot token (as a Secret).
+   - `MAX_CACHE_SIZE_GB`: Set to `0` (Koyeb storage is ephemeral).
+   - `PUBLIC_URL`: Your app's Koyeb URL (e.g., `https://app-name.koyeb.app`).
+   - `YOUTUBE_COOKIES`: (Required for Cloud) Your Base64-encoded `cookies.txt` (see below).
+3. **Instance Size:** Works on the **Free (Nano)** tier.
 
-```bash
-python3 -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
-```
+---
 
-### ⚡ Performance Boost (Highly Recommended for RPi)
+## 🍪 YouTube Cookies (Bypass Bot Detection)
 
-For the best performance on Raspberry Pi Zero 2W or other Linux devices, **install `uvloop`**. The bot detects it automatically and uses it to replace the standard Python event loop, significantly increasing speed.
+Cloud providers (like Koyeb) are often blocked by YouTube. To fix this:
+1. Use a browser extension (like "Get cookies.txt LOCALLY") to export your cookies from YouTube.
+2. **On RPi:** Place the `cookies.txt` file in the root folder.
+3. **On Cloud:** Encode your `cookies.txt` to Base64:
+   - Linux/Mac: `base64 -w 0 cookies.txt`
+   - Windows: `[Convert]::ToBase64String([IO.File]::ReadAllBytes("cookies.txt"))`
+4. Set the resulting string as the `YOUTUBE_COOKIES` environment variable.
 
-```bash
-pip install uvloop
-```
+---
 
-### 4. Configuration
-
-Create a `.env` file in the root directory and add your bot token:
-
-```ini
-DISCORD_TOKEN=your_discord_bot_token_here
-```
-
-### 🌍 Environment Variables
-
-The bot can be configured using the following environment variables:
+## 🌍 Environment Variables
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `DISCORD_TOKEN` | Your Discord Bot Token (Required) | None |
+| `DISCORD_TOKEN` | Discord Bot Token | None |
 | `PORT` | Port for the Web Dashboard | `5000` |
-| `PUBLIC_URL` | Pre-defined URL for the dashboard (e.g. Koyeb URL) | `None` (Uses Cloudflared) |
-| `MAX_CACHE_SIZE_GB` | Maximum size of the music cache in GB | `16` |
+| `PUBLIC_URL` | Pre-defined URL (Disables Cloudflare Tunnel) | `None` |
+| `MAX_CACHE_SIZE_GB` | Max size of the music cache in GB | `16` |
+| `YOUTUBE_COOKIES` | Base64 encoded `cookies.txt` content | `None` |
 
-## 🐳 Deployment
-
-### Docker
-
-You can run the bot using Docker. This is the easiest way to ensure all dependencies (FFmpeg, etc.) are correctly installed.
-
-```bash
-docker build -t pimusic-bot .
-docker run -e DISCORD_TOKEN="your_token" -p 8080:8080 pimusic-bot
-```
-
-### Koyeb (Free Tier)
-
-This bot is optimized for deployment on [Koyeb](https://www.koyeb.com/).
-
-1. Create a new **Service** from your GitHub repository.
-2. Set `DISCORD_TOKEN` in the environment variables.
-3. (Optional) Set `PUBLIC_URL` to your Koyeb app URL (e.g., `https://my-bot-xyz.koyeb.app`) to disable automatic Cloudflare tunneling.
-4. The bot will automatically use the correct port and start the web dashboard.
-
-## 🎮 Usage
-
-Run the bot using:
-
-```bash
-python src/bot.py
-```
-
-### Discord Commands
+## 🎮 Commands
 
 - `/play [query]` - Play a song or playlist.
-- `/pause` / `/resume` - Pause or resume playback.
-- `/skip` - Skip the current track.
-- `/stop` - Stop music and disconnect.
-- `/autoplay` - Toggle Auto-Play mode.
-- `/new` - Regenerate Auto-Play recommendation.
-- `/link` - Get a secure link to the Web Dashboard.
-- `/setchannel` - Bind the bot to the current text channel.
-- `/guess [search]` - Start an interactive "Guess the Song" quiz.
-- `/queue` - View the current music queue.
-- `/shuffle` - Shuffle the music queue.
-- `/clear` - Clear the current queue.
-- `/history` - View recently played tracks.
-- `/search [query]` - Search for songs with interactive results.
-- `/saveplaylist` / `/loadplaylist` - Manage custom playlists.
-- `/listplaylists` / `/delplaylist` - List or delete saved playlists.
-- `/dash` - Monitor system performance and storage stats.
-- `/help` - View all available commands.
-
-### Web Dashboard
-
-Use the `/link` command in Discord to generate a unique, authenticated URL (e.g., `https://example-tunnel.trycloudflare.com`).
-
-- **Auto-Install:** On the first run, the bot will automatically download the `cloudflared` binary for your system architecture (AMD64, ARM64, or ARM).
-- **Auto-Start:** The tunnel starts when the bot launches. The `/link` command simply retrieves the active URL.
-- **Secure:** Each link is protected by a unique session token generated at runtime.
+- `/link` - Get the link to your Web Dashboard.
+- `/guess` - Start a song quiz game.
+- `/dash` - Monitor system stats (CPU, RAM, Cache).
+- `/help` - View all commands.
 
 ## 📜 License
-
 [MIT](LICENSE)
