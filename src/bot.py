@@ -1508,15 +1508,9 @@ async def on_ready():
         log_error(f"Sync error: {e}")
 
 async def main():
-    # Write cookies from env if present
-    cookies = os.getenv('YOUTUBE_COOKIES')
-    if cookies:
-        try:
-            with open('cookies.txt', 'w') as f:
-                f.write(cookies)
-            log_info("🍪 Cookies loaded from environment.")
-        except Exception as e:
-            log_error(f"❌ Failed to write cookies: {e}")
+    # Write cookies from env if present (Already handled in config.py)
+    if os.path.exists('cookies.txt'):
+        log_info("🍪 Cookies loaded from environment.")
 
     try:
         async with bot:

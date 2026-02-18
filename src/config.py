@@ -5,6 +5,15 @@ load_dotenv()
 
 TOKEN = os.getenv('DISCORD_TOKEN')
 
+# Handle YouTube Cookies from Environment
+cookies = os.getenv('YOUTUBE_COOKIES')
+if cookies:
+    try:
+        with open('cookies.txt', 'w') as f:
+            f.write(cookies)
+    except Exception:
+        pass
+
 # File Paths
 CACHE_DIR = './music_cache'
 CACHE_MAP_FILE = 'cache_map.json'
