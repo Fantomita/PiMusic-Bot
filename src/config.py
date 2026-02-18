@@ -32,6 +32,9 @@ COMMON_YDL_ARGS = {
     'socket_timeout': 30
 }
 
+if os.path.exists('cookies.txt'):
+    COMMON_YDL_ARGS['cookiefile'] = 'cookies.txt'
+
 YDL_PLAY_OPTS = {
     'format': 'bestaudio[ext=webm]/bestaudio/best',
     **COMMON_YDL_ARGS

@@ -1323,7 +1323,11 @@ class MusicBot(commands.Cog):
     async def dash(self, ctx):
         cpu = psutil.cpu_percent()
         ram = psutil.virtual_memory().percent
-        try: temp = os.popen("vcgencmd measure_temp").readline().replace("temp=","").strip()
+        try: 
+            if shutil.which("vcgencmd"):
+                temp = os.popen("vcgencmd measure_temp").readline().replace("temp=","").strip()
+            else:
+                temp = "N/A"
         except: temp = "N/A"
         count = len([n for n in os.listdir(CACHE_DIR) if n.endswith('.webm')])
         size = sum(os.path.getsize(os.path.join(CACHE_DIR, f)) for f in os.listdir(CACHE_DIR) if f.endswith('.webm')) / (1024**3)
