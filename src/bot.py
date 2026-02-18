@@ -578,7 +578,7 @@ class MusicBot(commands.Cog):
         self.states = {}
         self.cleanup_loop.start()
         self.tunnel_monitor.start()
-        self.public_url = None
+        self.public_url = os.getenv('PUBLIC_URL')
         self.web_auth_token = str(uuid4())
         self.tunnel_proc = None
         self.drain_task = None
@@ -589,7 +589,8 @@ class MusicBot(commands.Cog):
         
         global bot_instance
         bot_instance = bot 
-        self.web_task = self.bot.loop.create_task(app.run_task(host='0.0.0.0', port=5000))
+        port = int(os.getenv('PORT', 5000))
+        self.web_task = self.bot.loop.create_task(app.run_task(host='0.0.0.0', port=port))
         
         # Pre-start Cloudflared
         self.bot.loop.create_task(self.start_cloudflared())
@@ -662,7 +663,8 @@ class MusicBot(commands.Cog):
 
             # Check local responsiveness
             try:
-                def check(): return requests.get("http://127.0.0.1:5000/health", timeout=5)
+                port = int(os.getenv('PORT', 5000))
+                def check(): return requests.get(f"http://127.0.0.1:{port}/health", timeout=5)
                 r = await self.bot.loop.run_in_executor(None, check)
                 if r.status_code != 200:
                     log_error(f"⚠️ Local Web Server health check failed: {r.status_code}")
@@ -671,9 +673,10 @@ class MusicBot(commands.Cog):
 
     async def start_cloudflared(self):
         """Starts the tunnel and retrieves the URL."""
-        # 1. If already running and active, return URL
-        if self.public_url and self.tunnel_proc and self.tunnel_proc.returncode is None:
-            return self.public_url
+        # 1. If already have a public URL and it's not from a dead tunnel, return it
+        if self.public_url:
+            if not self.tunnel_proc or self.tunnel_proc.returncode is None:
+                return self.public_url
         
         # 2. If process is running but no URL yet, wait for it (join existing startup)
         if self.tunnel_proc and self.tunnel_proc.returncode is None:
@@ -698,8 +701,9 @@ class MusicBot(commands.Cog):
 
         log_info("☁️ Starting Cloudflared Tunnel...")
         # Use 127.0.0.1 to avoid IPv6/localhost resolution issues
+        port = int(os.getenv('PORT', 5000))
         self.tunnel_proc = await asyncio.create_subprocess_exec(
-            "./cloudflared", "tunnel", "--url", "http://127.0.0.1:5000",
+            "./cloudflared", "tunnel", "--url", f"http://127.0.0.1:{port}",
             stdout=asyncio.subprocess.DEVNULL,
             stderr=asyncio.subprocess.PIPE
         )

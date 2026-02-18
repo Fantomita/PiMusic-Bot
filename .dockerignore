@@ -1,0 +1,15 @@
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.venv/
+music_cache/
+.git/
+.gitignore
+.env
+cache_map.json
+playlists.json
+server_settings.json
