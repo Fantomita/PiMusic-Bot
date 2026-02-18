@@ -36,10 +36,10 @@ COLOR_MAIN = 0xFFD700  # Gold
 # FFmpeg Options
 FFMPEG_STREAM_OPTS = {
     'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5 -nostdin',
-    'options': '-vn -threads 2 -bufsize 8192k'
+    'options': '-vn -threads 2 -bufsize 16384k'
 }
 FFMPEG_LOCAL_OPTS = {
-    'options': '-vn -threads 2 -bufsize 8192k'
+    'options': '-vn -threads 2 -bufsize 16384k'
 }
 
 # yt-dlp Options
@@ -49,22 +49,24 @@ COMMON_YDL_ARGS = {
     'noplaylist': True,
     'socket_timeout': 30,
     'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-    'referer': 'https://www.youtube.com/'
+    'referer': 'https://www.youtube.com/',
+    'ignoreerrors': True,
+    'no_check_certificate': True
 }
 
 if os.path.exists('cookies.txt'):
     COMMON_YDL_ARGS['cookiefile'] = 'cookies.txt'
 
 YDL_PLAY_OPTS = {
-    'format': 'bestaudio[ext=webm]/bestaudio/best',
+    'format': 'bestaudio/best',
     **COMMON_YDL_ARGS
 }
 
 YDL_SINGLE_OPTS = {
     'extract_flat': 'in_playlist',
-    'playlist_items': '1', # Only get first item if it forces a list
+    'playlist_items': '1', 
     **COMMON_YDL_ARGS,
-    'noplaylist': True # Critical change
+    'noplaylist': True 
 }
 
 YDL_FLAT_OPTS = {
@@ -87,7 +89,7 @@ YDL_MIX_OPTS = {
 }
 
 YDL_DOWNLOAD_OPTS = {
-    'format': 'bestaudio[ext=webm]/bestaudio/best',
+    'format': 'bestaudio/best',
     'outtmpl': f'{CACHE_DIR}/%(id)s.%(ext)s',
     'writethumbnail': True,
     'postprocessors': [{'key': 'FFmpegThumbnailsConvertor', 'format': 'jpg'}],
