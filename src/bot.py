@@ -317,10 +317,11 @@ class GuessGame:
                     'id': self.current_song['id']
                 }
                 if winner:
-                    self.scores[winner.id] = self.scores.get(winner.id, 0) + 1
-                    msg_text = f"**{winner.display_name}** got it! It was: **{self.current_song['title']}** by **{self.current_song['author']}**"
+                    points_awarded = max(1, 10 - ((self.play_duration - 5) // 5) * 2)
+                    self.scores[winner.id] = self.scores.get(winner.id, 0) + points_awarded
+                    msg_text = f"**{winner.display_name}** got it! It was: **{self.current_song['title']}** by **{self.current_song['author']}**\n🏆 *+{points_awarded} points!*"
                     embed = discord.Embed(title="🎉 Correct!", description=msg_text, color=discord.Color.green())
-                    self.add_to_history('event', 'SYSTEM', f"🎉 {winner.display_name} guessed correctly!", True)
+                    self.add_to_history('event', 'SYSTEM', f"🎉 {winner.display_name} guessed correctly! (+{points_awarded} pts)", True)
                 else:
                     msg_text = f"It was: **{self.current_song['title']}** by **{self.current_song['author']}**"
                     embed = discord.Embed(title="⏭️ Skipped", description=msg_text, color=discord.Color.orange())
