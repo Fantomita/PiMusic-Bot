@@ -374,7 +374,8 @@ class GuessGame:
         if self.mode == "both":
             embed.set_footer(text="Format: Artist - Title (or just Title - Artist)")
 
-        embed.add_field(name="Difficulty", value=f"Playing {self.play_duration}s")
+        points_awarded = max(1, 10 - ((self.play_duration - 5) // 5) * 2)
+        embed.add_field(name="Difficulty", value=f"Playing {self.play_duration}s (🏆 {points_awarded} pts)")
         
         self.message = await self.ctx.send(embed=embed, view=GuessGameView(self))
         await self.play_segment()
@@ -407,7 +408,8 @@ class GuessGame:
                 if extra > 0 or True: # Always update if called
                     target_type = "Title" if self.mode == "title" else "Artist"
                     embed = discord.Embed(title=f"🎮 Guess the {target_type}!", description="Playing audio segment...", color=COLOR_MAIN)
-                    embed.add_field(name="Difficulty", value=f"Playing {self.play_duration}s")
+                    points_awarded = max(1, 10 - ((self.play_duration - 5) // 5) * 2)
+                    embed.add_field(name="Difficulty", value=f"Playing {self.play_duration}s (🏆 {points_awarded} pts)")
                     if self.message:
                         try: await self.message.edit(embed=embed)
                         except: pass

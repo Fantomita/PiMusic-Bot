@@ -598,6 +598,7 @@ async def api_game_status(guild_id):
         'active': True,
         'mode': g.mode,
         'round_duration': g.play_duration,
+        'current_points': max(1, 10 - ((g.play_duration - 5) // 5) * 2),
         'scores': scores,
         'transitioning': g.transitioning,
         'history': g.history,

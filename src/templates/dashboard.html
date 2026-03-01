@@ -744,7 +744,7 @@
                     gameActive = true;
                     
                     const channelInfo = data.channel ? ` | #${data.channel}` : '';
-                    document.getElementById('game-status').innerText = `Mode: Guess the ${data.mode.toUpperCase()} | Playing: ${data.round_duration}s${channelInfo}`;
+                    document.getElementById('game-status').innerText = `Mode: Guess the ${data.mode.toUpperCase()} | Playing: ${data.round_duration}s (🏆 ${data.current_points} pts)${channelInfo}`;
                     
                     // Leaderboard
                     const scoreList = document.getElementById('game-scores');
