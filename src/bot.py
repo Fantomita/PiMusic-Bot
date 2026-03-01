@@ -821,7 +821,8 @@ class MusicBot(commands.Cog):
                     state.last_interaction = now
 
                 is_alone = len(guild.voice_client.channel.members) == 1
-                is_idle = not guild.voice_client.is_playing() and (now - state.last_interaction).total_seconds() > 300
+                game_active = state.game and state.game.active
+                is_idle = not guild.voice_client.is_playing() and not game_active and (now - state.last_interaction).total_seconds() > 300
                 
                 if is_alone or is_idle:
                     await self.stop_logic(gid)
